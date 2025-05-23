@@ -261,3 +261,119 @@ async function editarReuniao(id) {
       alert('Erro ao carregar dados da reunião.');
   }
 }
+
+//relatorios...
+
+async function carregarRelatorios() {
+  document.getElementById('content').innerHTML = `
+    <h2 class="text-xl font-bold mb-4">Relatórios Recebidos</h2>
+    <p class="mb-4">Aqui você poderá visualizar, aprovar, recusar ou solicitar ajustes nos relatórios enviados pelos coordenadores e membros.</p>
+    <div id="lista-relatorios" class="bg-white rounded shadow p-4">
+      <p class="text-gray-500">Carregando relatórios...</p>
+    </div>
+  `;
+
+  try {
+    const response = await fetch('/api/relatorios');
+    if (!response.ok) throw new Error('Erro ao buscar relatórios.');
+
+    const relatorios = await response.json();
+    const lista = document.getElementById('lista-relatorios');
+
+    if (relatorios.length === 0) {
+      lista.innerHTML = `<p class="text-gray-500">Nenhum relatório recebido ainda.</p>`;
+      return;
+    }
+
+    lista.innerHTML = `
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr>
+            <th class="px-2 py-1 text-left">Projeto</th>
+            <th class="px-2 py-1 text-left">Tipo</th>
+            <th class="px-2 py-1 text-left">Coordenador</th>
+            <th class="px-2 py-1 text-left">Status</th>
+            <th class="px-2 py-1 text-left">Data</th>
+            <th class="px-2 py-1">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${relatorios.map(r => `
+            <tr>
+              <td class="border-t px-2 py-1">${r.projeto}</td>
+              <td class="border-t px-2 py-1">${r.tipo}</td>
+              <td class="border-t px-2 py-1">${r.coordenador}</td>
+              <td class="border-t px-2 py-1">${r.status}</td>
+              <td class="border-t px-2 py-1">${new Date(r.data_envio).toLocaleDateString()}</td>
+              <td class="border-t px-2 py-1">
+                <button class="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700" onclick="visualizarRelatorio(${r.id})">Ver</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    document.getElementById('lista-relatorios').innerHTML = `<p class="text-red-500">Erro ao carregar relatórios.</p>`;
+    console.error(error);
+  }
+}
+
+// ...existing code...
+
+// função para visualizar aprovar recursar ou solicitar ajustes nos relatorios
+async function visualizarRelatorio(id) {
+  // Busca detalhes do relatório
+  const resp = await fetch(`/api/relatorios`);
+  const relatorios = await resp.json();
+  const relatorio = relatorios.find(r => r.id === id);
+
+  if (!relatorio) {
+    document.getElementById('content').innerHTML = '<p class="text-red-500">Relatório não encontrado.</p>';
+    return;
+  }
+
+  document.getElementById('content').innerHTML = `
+    <h2 class="text-xl font-bold mb-4">Detalhes do Relatório</h2>
+    <div class="bg-white rounded shadow p-4 mb-4">
+      <p><strong>Projeto:</strong> ${relatorio.projeto}</p>
+      <p><strong>Tipo:</strong> ${relatorio.tipo}</p>
+      <p><strong>Coordenador:</strong> ${relatorio.coordenador}</p>
+      <p><strong>Status:</strong> ${relatorio.status}</p>
+      <p><strong>Conteúdo:</strong> ${relatorio.conteudo}</p>
+      <p><strong>Observação:</strong> ${relatorio.observacao || '-'}</p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="atualizarStatusRelatorio(${id}, 'Aprovado')" class="bg-green-600 text-white px-4 py-2 rounded">Aprovar</button>
+      <button onclick="atualizarStatusRelatorio(${id}, 'Recusado')" class="bg-red-600 text-white px-4 py-2 rounded">Recusar</button>
+      <button onclick="mostrarCampoObservacao(${id})" class="bg-yellow-500 text-white px-4 py-2 rounded">Solicitar Ajustes</button>
+      <button onclick="carregarRelatorios()" class="bg-gray-400 text-white px-4 py-2 rounded">Voltar</button>
+    </div>
+    <div id="campo-observacao"></div>
+  `;
+}
+
+function mostrarCampoObservacao(id) {
+  document.getElementById('campo-observacao').innerHTML = `
+    <textarea id="observacao" class="w-full border rounded p-2 mt-2" placeholder="Descreva as alterações necessárias"></textarea>
+    <button onclick="atualizarStatusRelatorio(${id}, 'Ajustes Necessários')" class="bg-yellow-600 text-white px-4 py-2 rounded mt-2">Enviar para Ajustes</button>
+  `;
+}
+
+async function atualizarStatusRelatorio(id, status) {
+  let observacao = '';
+  if (status === 'Ajustes Necessários') {
+    observacao = document.getElementById('observacao').value;
+    if (!observacao) {
+      alert('Por favor, escreva a observação para ajustes.');
+      return;
+    }
+  }
+  await fetch(`/api/relatorios/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, observacao })
+  });
+  alert('Status atualizado!');
+  carregarRelatorios();
+}

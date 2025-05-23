@@ -57,6 +57,53 @@ db.serialize(() => {
         )
     `);
 
+
+    // ...outras criações de tabela...
+
+    // Tabela de Relatórios (apenas UMA VEZ!)
+    db.run(`
+    CREATE TABLE IF NOT EXISTS relatorios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT NOT NULL,
+        projeto TEXT NOT NULL,
+        coordenador TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Pendente',
+        data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        conteudo TEXT,
+        observacao TEXT,
+        usuario_email TEXT
+    )
+`);
+
+    // Relatórios de exemplo
+    const relatoriosExemplo = [
+        {
+            tipo: "Criação de Projeto",
+            projeto: "Feira de Ciências",
+            coordenador: "João Silva",
+            status: "Pendente",
+            conteudo: "Descrição detalhada da Feira de Ciências.",
+            observacao: "",
+            usuario_email: "joao@gsd.com"
+        },
+        {
+            tipo: "Relatório de Andamento",
+            projeto: "Gincana Escolar",
+            coordenador: "Maria Eduarda",
+            status: "Aprovado",
+            conteudo: "A gincana está em andamento, tudo conforme o planejado.",
+            observacao: "",
+            usuario_email: "mariaeduarda@gsd.com"
+        }
+    ];
+    const stmtRel = db.prepare("INSERT INTO relatorios (tipo, projeto, coordenador, status, conteudo, observacao, usuario_email) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    relatoriosExemplo.forEach(r => {
+        stmtRel.run(r.tipo, r.projeto, r.coordenador, r.status, r.conteudo, r.observacao, r.usuario_email);
+    });
+    stmtRel.finalize();
+
+
+
     // Definição dos usuários fixos
     const users = [
         { name: 'Gabriel Callegari', email: 'gabrielcallegari@gsd.com', role: 'presidente', sector: 'Diretoria Geral', password: 'senha123' },
@@ -310,6 +357,37 @@ app.post('/api/login', (req, res) => {
         res.status(200).json({ message: 'Login realizado com sucesso!', user });
     });
 });
+
+
+//end point relatorio
+app.get('/api/relatorios', (req, res) => {
+    db.all(`SELECT * FROM relatorios ORDER BY data_envio DESC`, [], (err, rows) => {
+        if (err) {
+            console.error('Erro ao buscar relatórios:', err);
+            return res.status(500).json({ error: 'Erro ao buscar relatórios.' });
+        }
+        res.json(rows);
+    });
+});
+
+// Rota para atualizar status e observação do relatório
+app.put('/api/relatorios/:id', (req, res) => {
+    const { id } = req.params;
+    const { status, observacao } = req.body;
+
+    db.run(
+        `UPDATE relatorios SET status = ?, observacao = ? WHERE id = ?`,
+        [status, observacao, id],
+        function (err) {
+            if (err) {
+                console.error('Erro ao atualizar relatório:', err);
+                return res.status(500).json({ error: 'Erro ao atualizar relatório.' });
+            }
+            res.json({ message: 'Relatório atualizado com sucesso!' });
+        }
+    );
+});
+
 
 // Inicializar o servidor
 app.listen(PORT, () => {
