@@ -1,22 +1,18 @@
 const express = require('express');
-const path = require('path');  // Esse 'path' já foi declarado, removi a duplicação abaixo
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
-const multer = require('multer');  // Aqui estava tentando declarar o 'multer' em duplicidade
 const app = express();
 const PORT = 3000;
 
 app.use(cors()); // Para facilitar testes locais
 app.use(express.json());
 
-
-
 // Serve arquivos estáticos
 app.use('/login', express.static(path.join(__dirname, 'public', 'login')));
 app.use('/presidente', express.static(path.join(__dirname, 'public', 'presidente')));
 app.use('/coordenador', express.static(path.join(__dirname, 'public', 'coordenador')));
 app.use('/membro', express.static(path.join(__dirname, 'public', 'membro')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve a pasta de uploads para acessar os arquivos
 
 // Redireciona para login
 app.get('/', (req, res) => {
@@ -28,14 +24,38 @@ const db = new sqlite3.Database(':memory:');
 
 // Criando tabelas no banco de dados
 db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        email TEXT UNIQUE,
-        role TEXT,
-        sector TEXT,
-        password TEXT
-    )`);
+    // Tabela de Reuniões
+    db.run(`
+        CREATE TABLE IF NOT EXISTS reunioes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            descricao TEXT NOT NULL,
+            data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Tabela de Presenças
+    db.run(`
+        CREATE TABLE IF NOT EXISTS presencas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reuniao_id INTEGER NOT NULL,
+            usuario_id INTEGER NOT NULL,
+            status TEXT NOT NULL, -- 'presente' ou 'ausente'
+            FOREIGN KEY (reuniao_id) REFERENCES reunioes (id)
+        )
+    `);
+
+    // Tabela de Usuários
+    db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            role TEXT NOT NULL,
+            sector TEXT NOT NULL,
+            password TEXT NOT NULL
+        )
+    `);
 
     // Definição dos usuários fixos
     const users = [
@@ -62,201 +82,236 @@ db.serialize(() => {
         stmt.run(user.name, user.email, user.role, user.sector, user.password);
     });
     stmt.finalize();
-
-    // Criar a tabela de Relatórios
-    db.run(`
-        CREATE TABLE IF NOT EXISTS relatorios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titulo TEXT,
-            descricao TEXT,
-            usuario_id INTEGER,
-            status TEXT DEFAULT 'pendente',  -- status pode ser: 'pendente', 'aprovado', 'recusado'
-            observacoes TEXT,
-            data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(usuario_id) REFERENCES users(id)
-        )
-    `);
-
-    // Criar a tabela de Calendário
-    db.run("CREATE TABLE IF NOT EXISTS calendario (id INTEGER PRIMARY KEY AUTOINCREMENT, titulo TEXT, data TEXT)");
-
-    // Criar a tabela de Arquivos
-    db.run(`
-        CREATE TABLE IF NOT EXISTS arquivos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT,
-            caminho TEXT,
-            tipo TEXT,
-            data_upload DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-
-    // Criar a tabela de presença
-    db.run(`
-     CREATE TABLE IF NOT EXISTS presencas (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  status TEXT,
-  date TEXT,  -- Mudado para "date" para refletir a mudança no backend
-  FOREIGN KEY(user_id) REFERENCES users(id)
-);
-    `);
 });
 
-// Endpoint para login
-app.post('/login', (req, res) => {
-    const { email, password } = req.body;
-    db.get("SELECT * FROM users WHERE email = ? AND password = ?", [email, password], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Erro no servidor' });
-        if (!row) return res.status(401).json({ error: 'Credenciais inválidas' });
+// Rota para salvar uma reunião
+app.post('/api/reunioes', (req, res) => {
+    const { nome, descricao, presencas } = req.body;
 
-        res.json({
-            message: 'Login bem-sucedido',
-            user: { id: row.id, name: row.name, email: row.email, role: row.role, sector: row.sector }
+    console.log('Dados recebidos:', { nome, descricao, presencas });
+
+    if (!nome || !descricao || !presencas) {
+        return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
+    }
+
+    const query = `INSERT INTO reunioes (nome, descricao) VALUES (?, ?)`;
+    db.run(query, [nome, descricao], function (err) {
+        if (err) {
+            console.error('Erro ao salvar reunião:', err);
+            return res.status(500).json({ error: 'Erro ao salvar a reunião.' });
+        }
+
+        const reuniaoId = this.lastID;
+
+        const presencaQuery = `INSERT INTO presencas (reuniao_id, usuario_id, status) VALUES (?, ?, ?)`;
+        const stmt = db.prepare(presencaQuery);
+
+        presencas.forEach(usuario => {
+            stmt.run(reuniaoId, usuario.id, usuario.status, (err) => {
+                if (err) {
+                    console.error('Erro ao salvar presença:', err);
+                }
+            });
         });
+
+        stmt.finalize();
+
+        res.status(201).json({ message: 'Reunião salva com sucesso!' });
     });
 });
 
-// Rota para adicionar evento no calendário
-app.post('/calendario', (req, res) => {
-    const { titulo, data } = req.body;
+// Rota para listar todas as reuniões
+app.get('/api/reunioes', (req, res) => {
+    const queryReunioes = `
+        SELECT r.id, r.nome, r.descricao, r.data_criacao,
+               p.usuario_id, p.status, u.name AS usuario_nome
+        FROM reunioes r
+        LEFT JOIN presencas p ON r.id = p.reuniao_id
+        LEFT JOIN users u ON p.usuario_id = u.id
+        ORDER BY r.data_criacao DESC
+    `;
 
-    if (!titulo || !data) {
-        return res.status(400).json({ error: 'Título e data são obrigatórios.' });
-    }
-
-    db.run('INSERT INTO calendario (titulo, data) VALUES (?, ?)', [titulo, data], function (err) {
+    db.all(queryReunioes, [], (err, rows) => {
         if (err) {
-            return res.status(500).json({ error: 'Erro ao salvar evento.' });
+            console.error('Erro ao buscar reuniões:', err);
+            return res.status(500).json({ error: 'Erro ao buscar reuniões.' });
         }
-        res.status(200).json({ message: 'Evento adicionado com sucesso!' });
-    });
-});
 
-// Rota para buscar todos os eventos do calendário
-app.get('/calendario', (req, res) => {
-    db.all('SELECT * FROM calendario ORDER BY data ASC', [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: 'Erro ao buscar eventos.' });
-        }
-        res.json(rows);
-    });
-});
+        // Agrupar reuniões e presenças
+        const reunioes = rows.reduce((acc, row) => {
+            const { id, nome, descricao, data_criacao, usuario_id, status, usuario_nome } = row;
 
-// Rota para enviar relatório
-app.post('/relatorios', (req, res) => {
-    const { titulo, descricao, usuario_id } = req.body;
-
-    if (!titulo || !descricao || !usuario_id) {
-        return res.status(400).json({ error: 'Dados incompletos.' });
-    }
-
-    db.run('INSERT INTO relatorios (titulo, descricao, usuario_id, status) VALUES (?, ?, ?, ?)',
-        [titulo, descricao, usuario_id, 'pendente'], function (err) {
-            if (err) {
-                return res.status(500).json({ error: 'Erro ao enviar relatório.' });
+            if (!acc[id]) {
+                acc[id] = {
+                    id,
+                    nome,
+                    descricao,
+                    data_criacao,
+                    presencas: []
+                };
             }
-            res.status(201).json({ message: 'Relatório enviado com sucesso!', id: this.lastID });
-        });
-});
 
-// Listar relatórios pendentes para o presidente
-app.get('/relatorios', (req, res) => {
-    db.all('SELECT * FROM relatorios WHERE status = "pendente"', (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: 'Erro ao buscar relatórios.' });
-        }
-        res.json(rows);
+            if (usuario_id) {
+                acc[id].presencas.push({ usuario_id, usuario_nome, status });
+            }
+
+            return acc;
+        }, {});
+
+        res.json(Object.values(reunioes));
     });
 });
 
-// Aprovar/Recusar relatório com observação
-app.put('/relatorios/:id', (req, res) => {
-    const { status, observacoes } = req.body;
+// Rota para atualizar uma reunião
+app.put('/api/reunioes/:id', (req, res) => {
+    const { id } = req.params;
+    const { nome, descricao, presencas } = req.body;
+
+    console.log('Atualizando reunião:', { id, nome, descricao, presencas });
+
+    if (!nome || !descricao || !presencas) {
+        return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
+    }
+
+    // Atualizar a reunião
+    const query = `UPDATE reunioes SET nome = ?, descricao = ? WHERE id = ?`;
+    db.run(query, [nome, descricao, id], function (err) {
+        if (err) {
+            console.error('Erro ao atualizar reunião:', err);
+            return res.status(500).json({ error: 'Erro ao atualizar a reunião.' });
+        }
+
+        // Atualizar as presenças
+        const deletePresencasQuery = `DELETE FROM presencas WHERE reuniao_id = ?`;
+        db.run(deletePresencasQuery, [id], (err) => {
+            if (err) {
+                console.error('Erro ao deletar presenças antigas:', err);
+                return res.status(500).json({ error: 'Erro ao atualizar as presenças.' });
+            }
+
+            const insertPresencasQuery = `INSERT INTO presencas (reuniao_id, usuario_id, status) VALUES (?, ?, ?)`;
+            const stmt = db.prepare(insertPresencasQuery);
+
+            presencas.forEach(usuario => {
+                stmt.run(id, usuario.id, usuario.status, (err) => {
+                    if (err) {
+                        console.error('Erro ao inserir presença:', err);
+                    }
+                });
+            });
+
+            stmt.finalize();
+            res.status(200).json({ message: 'Reunião atualizada com sucesso!' });
+        });
+    });
+});
+
+// Rota para excluir uma reunião
+app.delete('/api/reunioes/:id', (req, res) => {
     const { id } = req.params;
 
-    if (!status || !observacoes) {
-        return res.status(400).json({ error: 'Dados incompletos.' });
-    }
+    console.log('Excluindo reunião:', id);
 
-    db.run('UPDATE relatorios SET status = ?, observacoes = ? WHERE id = ?', [status, observacoes, id], function (err) {
+    const deletePresencasQuery = `DELETE FROM presencas WHERE reuniao_id = ?`;
+    db.run(deletePresencasQuery, [id], (err) => {
         if (err) {
-            return res.status(500).json({ error: 'Erro ao atualizar relatório.' });
+            console.error('Erro ao deletar presenças:', err);
+            return res.status(500).json({ error: 'Erro ao excluir as presenças.' });
         }
-        res.json({ message: 'Relatório atualizado com sucesso.' });
+
+        const deleteReuniaoQuery = `DELETE FROM reunioes WHERE id = ?`;
+        db.run(deleteReuniaoQuery, [id], (err) => {
+            if (err) {
+                console.error('Erro ao deletar reunião:', err);
+                return res.status(500).json({ error: 'Erro ao excluir a reunião.' });
+            }
+
+            res.status(200).json({ message: 'Reunião excluída com sucesso!' });
+        });
     });
 });
 
-// Configuração do multer para salvar arquivos no servidor
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
+// Rota para buscar uma reunião por ID
+app.get('/api/reunioes/:id', (req, res) => {
+    const { id } = req.params;
 
-const upload = multer({ storage: storage });
+    const queryReuniao = `
+        SELECT r.id, r.nome, r.descricao, r.data_criacao,
+               p.usuario_id, p.status, u.name AS usuario_nome
+        FROM reunioes r
+        LEFT JOIN presencas p ON r.id = p.reuniao_id
+        LEFT JOIN users u ON p.usuario_id = u.id
+        WHERE r.id = ?
+    `;
 
-// Rota para upload de arquivos
-app.post('/arquivos', upload.single('arquivo'), (req, res) => {
-    const { nome } = req.body;
-    const { filename, mimetype } = req.file;
-
-    const caminhoArquivo = `/uploads/${filename}`;
-    const tipoArquivo = mimetype;
-
-    const stmt = db.prepare('INSERT INTO arquivos (nome, caminho, tipo) VALUES (?, ?, ?)');
-    stmt.run(nome, caminhoArquivo, tipoArquivo, (err) => {
+    db.all(queryReuniao, [id], (err, rows) => {
         if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Erro ao salvar arquivo no banco de dados' });
+            console.error('Erro ao buscar reunião:', err);
+            return res.status(500).json({ error: 'Erro ao buscar reunião.' });
         }
 
-        res.status(200).json({ message: 'Arquivo enviado e salvo com sucesso!' });
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Reunião não encontrada.' });
+        }
+
+        // Agrupar os dados da reunião
+        const { nome, descricao, data_criacao } = rows[0];
+        const presencas = rows.map(row => ({
+            usuario_id: row.usuario_id,
+            usuario_nome: row.usuario_nome,
+            status: row.status
+        }));
+
+        res.json({ id, nome, descricao, data_criacao, presencas });
     });
-    stmt.finalize();
 });
 
-
-// Rota para listar arquivos
-app.get('/arquivos', (req, res) => {
-    db.all('SELECT * FROM arquivos', (err, rows) => {
-        if (err) return res.status(500).json({ error: 'Erro ao buscar arquivos' });
+// Rota para listar usuários
+app.get('/api/usuarios', (req, res) => {
+    db.all(`SELECT id, name FROM users`, [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: 'Erro ao buscar usuários.' });
+        }
         res.json(rows);
     });
 });
 
-// Rota para salvar a presença dos usuários
-app.post('/presencas', (req, res) => {
-  const { presencas, date } = req.body;  // Alinhei o nome do campo para "date"
+// Rota de Login
+app.post('/api/login', (req, res) => {
+    const { email, password } = req.body;
 
-  if (!presencas || !date) {
-    return res.status(400).json({ error: 'Dados incompletos.' });
-  }
+    console.log('E-mail recebido:', email);
+    console.log('Senha recebida:', password);
 
-  const stmt = db.prepare('INSERT INTO presencas (user_id, status, date) VALUES (?, ?, ?)');
-  presencas.forEach(p => {
-    stmt.run(p.user_id, p.status, date);  // Usei "date" para garantir consistência com o frontend
-  });
+    if (!email || !password) {
+        return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+    }
 
-  stmt.finalize();
-  res.json({ message: 'Presenças registradas com sucesso!' });
+    const query = `SELECT * FROM users WHERE email = ?`;
+    db.get(query, [email], (err, user) => {
+        if (err) {
+            console.error('Erro ao buscar usuário:', err);
+            return res.status(500).json({ error: 'Erro ao buscar usuário.' });
+        }
+
+        if (!user) {
+            console.log('Usuário não encontrado.');
+            return res.status(401).json({ error: 'Credenciais inválidas.' });
+        }
+
+        console.log('Usuário encontrado:', user);
+
+        if (user.password !== password) {
+            console.log('Senha incorreta.');
+            return res.status(401).json({ error: 'Credenciais inválidas.' });
+        }
+
+        console.log('Login bem-sucedido.');
+        res.status(200).json({ message: 'Login realizado com sucesso!', user });
+    });
 });
 
-// Rota para consultar as presenças por data
-app.get('/presencas/:data_reuniao', (req, res) => {
-  const { data_reuniao } = req.params;
-
-  db.all('SELECT u.name, p.status FROM presencas p JOIN users u ON p.user_id = u.id WHERE p.data_reuniao = ?', [data_reuniao], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Erro ao buscar presenças.' });
-    res.json(rows);
-  });
-});
-
-
-// Iniciar o servidor
+// Inicializar o servidor
 app.listen(PORT, () => {
     console.log(`Servidor rodando em http://localhost:${PORT}`);
 });

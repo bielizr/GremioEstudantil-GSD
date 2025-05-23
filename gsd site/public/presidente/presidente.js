@@ -1,288 +1,263 @@
-document.addEventListener('DOMContentLoaded', () => {
-  // Seletores
-  const formAdicionarEvento = document.getElementById('form-adicionar-evento');
-  const calendarioVisualizacao = document.getElementById('calendario-visualizacao');
-  
-  let eventos = []; // Para armazenar os eventos
+// Função para carregar a interface de Registro de Reuniões
+function carregarRegistroReunioes() {
+  document.getElementById('content').innerHTML = `
+    <h2 class="text-xl font-bold mb-4">Registro de Reuniões</h2>
+    <form id="form-reuniao" class="space-y-4">
+      <!-- Nome da Reunião -->
+      <div>
+        <label for="nome-reuniao" class="block text-sm font-medium text-gray-700">Nome da Reunião</label>
+        <input type="text" id="nome-reuniao" name="nome-reuniao" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="Digite o nome da reunião" required>
+      </div>
 
-  // Função para adicionar evento
-  formAdicionarEvento.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const titulo = document.getElementById('evento-titulo').value.trim();
-    const data = document.getElementById('evento-data').value.trim();
-    
-    if (!titulo || !data) {
-      alert('Preencha todos os campos!');
-      return;
-    }
-    
-    // Salvar evento no banco (para o backend)
-    const res = await fetch('http://localhost:3000/calendario', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ titulo, data })
-    });
-    
-    if (res.ok) {
-      alert('Evento adicionado com sucesso!');
-      carregarEventos(); // Recarregar a lista de eventos
-      formAdicionarEvento.reset();
-    } else {
-      alert('Erro ao adicionar evento.');
-    }
-  });
+      <!-- Descrição -->
+      <div>
+        <label for="descricao-reuniao" class="block text-sm font-medium text-gray-700">Descrição</label>
+        <textarea id="descricao-reuniao" name="descricao-reuniao" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="Digite uma breve descrição" required></textarea>
+      </div>
 
-  // Função para carregar os eventos
-  async function carregarEventos() {
-    const res = await fetch('http://localhost:3000/calendario');
-    eventos = await res.json();
+      <!-- Lista de Chamada -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Lista de Chamada</label>
+        <div id="lista-chamada" class="space-y-2">
+          <!-- Aqui será gerada a lista de usuários dinamicamente -->
+        </div>
+      </div>
 
-    calendarioVisualizacao.innerHTML = ''; // Limpar a lista antes de renderizar
-
-    if (eventos.length === 0) {
-      calendarioVisualizacao.innerHTML = '<p class="text-gray-600">Nenhum evento registrado.</p>';
-      return;
-    }
-
-    eventos.forEach(evento => {
-      const div = document.createElement('div');
-      div.className = 'bg-white p-4 rounded shadow';
-
-      div.innerHTML = `
-        <h3 class="font-bold text-lg">${evento.titulo}</h3>
-        <p><strong>Data:</strong> ${evento.data}</p>
-      `;
-      
-      calendarioVisualizacao.appendChild(div);
-    });
-  }
-
-  // Inicializa o calendário com os eventos
-  carregarEventos();
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-  // Tabs
-  const tabs = document.querySelectorAll('.tab-btn');
-  const contents = document.querySelectorAll('.tab-content');
-
-  function switchTab(name) {
-    tabs.forEach(t => t.dataset.tab === name ? t.classList.add('active') : t.classList.remove('active'));
-    contents.forEach(c => c.id === name ? c.classList.remove('hidden') : c.classList.add('hidden'));
-  }
-
-  switchTab('calendario'); // Inicia com a aba "calendario" aberta
-
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      switchTab(tab.dataset.tab);
-    });
-  });
-
-  // ------- RELATÓRIOS -------
-
-  const listaRelatorios = document.getElementById('lista-relatorios');
-
-  async function carregarRelatorios() {
-    const res = await fetch('http://localhost:3000/relatorios'); // Busca os relatórios do backend
-    const relatorios = await res.json();
-
-    listaRelatorios.innerHTML = '';
-    if (relatorios.length === 0) {
-      listaRelatorios.innerHTML = '<p class="text-gray-600">Nenhum relatório pendente.</p>';
-      return;
-    }
-
-    relatorios.forEach(r => {
-      const div = document.createElement('div');
-      div.className = 'bg-white p-4 rounded shadow';
-
-      div.innerHTML = `
-        <h3 class="font-bold text-lg">${r.titulo}</h3>
-        <p><strong>Enviado por:</strong> ${r.usuario_nome}</p>
-        <p><strong>Status:</strong> ${r.status}</p>
-        <p><strong>Observações:</strong> ${r.observacoes || 'Nenhuma'}</p>
-        <button class="bg-blue-500 text-white px-4 py-2 rounded mt-4" onclick="aprovarRelatorio(${r.id})">Aprovar</button>
-        <button class="bg-red-500 text-white px-4 py-2 rounded mt-4" onclick="recusarRelatorio(${r.id})">Recusar</button>
-      `;
-
-      listaRelatorios.appendChild(div);
-    });
-  }
-
-  // Aprovar relatório
-  async function aprovarRelatorio(id) {
-    const res = await fetch(`http://localhost:3000/relatorios/${id}/aprovar`, { method: 'PATCH' });
-    if (res.ok) {
-      alert('Relatório aprovado!');
-      carregarRelatorios(); // Recarregar os relatórios
-    } else {
-      alert('Erro ao aprovar o relatório.');
-    }
-  }
-
-  // Recusar relatório
-  async function recusarRelatorio(id) {
-    const res = await fetch(`http://localhost:3000/relatorios/${id}/recusar`, { method: 'PATCH' });
-    if (res.ok) {
-      alert('Relatório recusado!');
-      carregarRelatorios(); // Recarregar os relatórios
-    } else {
-      alert('Erro ao recusar o relatório.');
-    }
-  }
-
-  carregarRelatorios(); // Carregar os relatórios ao carregar a página
-});
-
-// ------ UPLOAD DE ARQUIVOS ------
-
-// Seletores
-const formUploadArquivo = document.getElementById('form-upload-arquivo');
-const listaArquivos = document.getElementById('lista-arquivos');
-
-// Evento de envio do formulário para upload de arquivos
-formUploadArquivo.addEventListener('submit', async (e) => {
-  e.preventDefault();
-
-  const tipo = document.getElementById('tipo').value.trim();
-  const arquivoInput = document.getElementById('arquivo');
-  const arquivo = arquivoInput.files[0];
-
-  if (!tipo || !arquivo) {
-    alert('Por favor, preencha o nome e selecione um arquivo.');
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('nome', tipo); // Tipo do arquivo, como 'Ata', 'Apresentação', etc.
-  formData.append('arquivo', arquivo); // O arquivo a ser enviado
-
-  try {
-    const response = await fetch('http://localhost:3000/arquivos', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!response.ok) {
-      alert('Erro ao enviar arquivo.');
-      return;
-    }
-
-    alert('Arquivo enviado com sucesso!');
-    carregarArquivos(); // Carregar arquivos após o upload
-  } catch (err) {
-    console.error(err);
-    alert('Erro ao conectar ao servidor.');
-  }
-});
-
-// Carregar arquivos
-async function carregarArquivos() {
-  const res = await fetch('http://localhost:3000/arquivos');
-  const arquivos = await res.json();
-
-  listaArquivos.innerHTML = ''; // Limpar a lista antes de renderizar
-
-  if (arquivos.length === 0) {
-    listaArquivos.innerHTML = '<p class="text-gray-600">Nenhum arquivo enviado.</p>';
-    return;
-  }
-
-  arquivos.forEach(arquivo => {
-    const div = document.createElement('div');
-    div.className = 'bg-white p-4 rounded shadow';
-
-    div.innerHTML = `
-      <h3 class="font-bold text-lg">${arquivo.nome}</h3>
-      <p><strong>Tipo:</strong> ${arquivo.tipo}</p>
-      <p><strong>Data de Upload:</strong> ${arquivo.data_upload}</p>
-      <a href="${arquivo.caminho}" target="_blank" class="text-blue-600 hover:underline">Baixar</a>
-    `;
-
-    listaArquivos.appendChild(div);
-  });
+      <!-- Botão Salvar -->
+      <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Salvar Reunião</button>
+    </form>
+  `;
+  carregarListaChamada(); // Carregar a lista de usuários dinamicamente
 }
 
-// Carregar arquivos ao iniciar
-carregarArquivos();
-
-document.addEventListener('DOMContentLoaded', () => {
-  const formPresenca = document.getElementById('form-presenca');
-  const btnSalvarPresenca = document.getElementById('btn-salvar-presenca');
-  const presencaMsg = document.getElementById('presenca-msg');
-  const dataReuniaoInput = document.getElementById('data-reuniao');
-  
-  let usuarios = [];
-
-  // Função para carregar os usuários
-  async function carregarUsuarios() {
-    const res = await fetch('http://localhost:3000/users');
-    usuarios = await res.json();
-    renderizarUsuarios();
-  }
-
-  // Função para renderizar a lista de presença
-  function renderizarUsuarios() {
-    formPresenca.innerHTML = ''; // Limpa a lista antes de renderizar novamente
-    usuarios.forEach(u => {
-      const div = document.createElement('div');
-      div.className = 'flex items-center space-x-4 bg-white p-2 rounded shadow';
-
-      div.innerHTML = `
-        <span class="flex-1">${u.name} (${u.sector})</span>
-        <label class="flex items-center space-x-2">
-          <input type="radio" name="presenca-${u.id}" value="presente" />
-          <span>Presente</span>
-        </label>
-        <label class="flex items-center space-x-2">
-          <input type="radio" name="presenca-${u.id}" value="ausente" />
-          <span>Ausente</span>
-        </label>
-      `;
-      formPresenca.appendChild(div);
-    });
-  }
-
-  // Função para salvar a presença
-  btnSalvarPresenca.addEventListener('click', async () => {
-    const dataReuniao = dataReuniaoInput.value.trim();
-    if (!dataReuniao) {
-      alert('Selecione uma data');
-      return;
-    }
-
-    // Coleta as presenças
-    const presencas = usuarios.map(u => {
-      const radios = document.getElementsByName(`presenca-${u.id}`);
-      let status = 'ausente';  // Se não for selecionado, assume como ausente
-      for (const r of radios) {
-        if (r.checked) {
-          status = r.value;
-          break;
-        }
+// Função para carregar a lista de chamada (dados do backend)
+async function carregarListaChamada() {
+  try {
+      const response = await fetch('/api/usuarios');
+      if (!response.ok) {
+          throw new Error('Erro ao buscar usuários.');
       }
-      return { user_id: u.id, status };
-    });
 
-    // Envia para o backend
-    const res = await fetch('http://localhost:3000/presencas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: dataReuniao, presencas })  // Enviando a data corretamente
-    });
+      const usuarios = await response.json();
+      const listaChamada = document.getElementById('lista-chamada');
+      listaChamada.innerHTML = usuarios.map(usuario => `
+        <div class="flex items-center space-x-2">
+          <input type="checkbox" id="usuario-${usuario.id}" name="presenca" value="${usuario.id}" class="h-4 w-4">
+          <label for="usuario-${usuario.id}" class="text-sm text-gray-700">${usuario.name}</label>
+        </div>
+      `).join('');
+  } catch (error) {
+      console.error('Erro ao carregar lista de chamada:', error);
+      alert('Erro ao carregar lista de chamada.');
+  }
+}
 
-    if (res.ok) {
-      presencaMsg.textContent = 'Presenças salvas com sucesso!';
-      formPresenca.innerHTML = '';  // Limpa após salvar
-    } else {
-      presencaMsg.textContent = 'Erro ao salvar presença.';
-    }
-  });
+// Interceptar o envio do formulário de reunião
+document.addEventListener('submit', async function (event) {
+  if (event.target.id === 'form-reuniao') {
+      event.preventDefault(); // Impede o comportamento padrão de recarregar a página
 
-  // Inicializa o carregamento dos usuários
-  carregarUsuarios();
+      const nome = document.getElementById('nome-reuniao').value;
+      const descricao = document.getElementById('descricao-reuniao').value;
+
+      // Obter as presenças marcadas
+      const presencas = Array.from(document.querySelectorAll('#lista-chamada input')).map(input => ({
+          id: input.value,
+          status: input.checked ? 'presente' : 'ausente',
+      }));
+
+      try {
+          // Enviar os dados para o backend
+          const response = await fetch('/api/reunioes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nome, descricao, presencas }),
+          });
+
+          if (!response.ok) {
+              throw new Error('Erro ao salvar a reunião.');
+          }
+
+          const data = await response.json();
+          alert(data.message || 'Reunião salva com sucesso!');
+          carregarRegistroReunioes(); // Recarregar a interface de reuniões
+      } catch (error) {
+          console.error('Erro:', error);
+          alert('Erro ao salvar a reunião.');
+      }
+  }
 });
 
+// Função para carregar a interface de exibição de reuniões
+async function carregarReunioesSalvas() {
+  try {
+      const response = await fetch('/api/reunioes');
+      if (!response.ok) {
+          throw new Error('Erro ao buscar reuniões.');
+      }
 
+      const reunioes = await response.json();
+
+      // Atualizar o conteúdo da página
+      const content = document.getElementById('content');
+      content.innerHTML = `
+          <h2 class="text-xl font-bold mb-4">Reuniões Salvas</h2>
+          <div id="lista-reunioes" class="space-y-4">
+              ${reunioes.map(reuniao => `
+                  <div class="p-4 border border-gray-300 rounded-md">
+                      <h3 class="text-lg font-bold">${reuniao.nome}</h3>
+                      <p class="text-sm text-gray-600">${reuniao.descricao}</p>
+                      <p class="text-sm text-gray-500">Data: ${new Date(reuniao.data_criacao).toLocaleString()}</p>
+                      <h4 class="text-sm font-bold mt-2">Presenças:</h4>
+                      <ul class="list-disc pl-5">
+                          ${reuniao.presencas.map(presenca => `
+                              <li>${presenca.usuario_nome} - ${presenca.status}</li>
+                          `).join('')}
+                      </ul>
+                  </div>
+              `).join('')}
+          </div>
+      `;
+  } catch (error) {
+      console.error('Erro ao carregar reuniões:', error);
+      alert('Erro ao carregar reuniões.');
+  }
+}
+
+// Função para carregar a interface de exibição de reuniões
+async function carregarReunioesSalvas() {
+  try {
+      const response = await fetch('/api/reunioes');
+      if (!response.ok) {
+          throw new Error('Erro ao buscar reuniões.');
+      }
+
+      const reunioes = await response.json();
+
+      // Atualizar o conteúdo da página
+      const content = document.getElementById('content');
+      content.innerHTML = `
+          <h2 class="text-xl font-bold mb-4">Reuniões Salvas</h2>
+          <div id="lista-reunioes" class="space-y-4">
+              ${reunioes.map(reuniao => `
+                  <div class="p-4 border border-gray-300 rounded-md">
+                      <h3 class="text-lg font-bold">${reuniao.nome}</h3>
+                      <p class="text-sm text-gray-600">${reuniao.descricao}</p>
+                      <p class="text-sm text-gray-500">Data: ${new Date(reuniao.data_criacao).toLocaleString()}</p>
+                      <h4 class="text-sm font-bold mt-2">Presenças:</h4>
+                      <ul class="list-disc pl-5">
+                          ${reuniao.presencas.map(presenca => `
+                              <li>${presenca.usuario_nome} - ${presenca.status}</li>
+                          `).join('')}
+                      </ul>
+                      <div class="mt-4 flex space-x-2">
+                          <button onclick="editarReuniao(${reuniao.id})" class="bg-yellow-500 text-white py-1 px-3 rounded hover:bg-yellow-600">Editar</button>
+                          <button onclick="excluirReuniao(${reuniao.id})" class="bg-red-500 text-white py-1 px-3 rounded hover:bg-red-600">Excluir</button>
+                      </div>
+                  </div>
+              `).join('')}
+          </div>
+      `;
+  } catch (error) {
+      console.error('Erro ao carregar reuniões:', error);
+      alert('Erro ao carregar reuniões.');
+  }
+}
+
+// Função para excluir uma reunião
+async function excluirReuniao(id) {
+  if (!confirm('Tem certeza que deseja excluir esta reunião?')) return;
+
+  try {
+      const response = await fetch(`/api/reunioes/${id}`, { method: 'DELETE' });
+      if (!response.ok) {
+          throw new Error('Erro ao excluir reunião.');
+      }
+
+      alert('Reunião excluída com sucesso!');
+      carregarReunioesSalvas(); // Recarregar a lista de reuniões
+  } catch (error) {
+      console.error('Erro ao excluir reunião:', error);
+      alert('Erro ao excluir reunião.');
+  }
+}
+
+// Função para editar uma reunião
+async function editarReuniao(id) {
+  try {
+      const response = await fetch(`/api/reunioes/${id}`);
+      if (!response.ok) {
+          throw new Error('Erro ao buscar dados da reunião.');
+      }
+
+      const reuniao = await response.json();
+
+      // Carregar os dados no formulário
+      document.getElementById('content').innerHTML = `
+          <h2 class="text-xl font-bold mb-4">Editar Reunião</h2>
+          <form id="form-editar-reuniao" class="space-y-4">
+              <!-- Nome da Reunião -->
+              <div>
+                  <label for="nome-reuniao" class="block text-sm font-medium text-gray-700">Nome da Reunião</label>
+                  <input type="text" id="nome-reuniao" name="nome-reuniao" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" value="${reuniao.nome}" required>
+              </div>
+
+              <!-- Descrição -->
+              <div>
+                  <label for="descricao-reuniao" class="block text-sm font-medium text-gray-700">Descrição</label>
+                  <textarea id="descricao-reuniao" name="descricao-reuniao" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>${reuniao.descricao}</textarea>
+              </div>
+
+              <!-- Lista de Chamada -->
+              <div>
+                  <label class="block text-sm font-medium text-gray-700">Lista de Chamada</label>
+                  <div id="lista-chamada" class="space-y-2">
+                      ${reuniao.presencas.map(presenca => `
+                          <div class="flex items-center space-x-2">
+                              <input type="checkbox" id="usuario-${presenca.usuario_id}" name="presenca" value="${presenca.usuario_id}" class="h-4 w-4" ${presenca.status === 'presente' ? 'checked' : ''}>
+                              <label for="usuario-${presenca.usuario_id}" class="text-sm text-gray-700">${presenca.usuario_nome}</label>
+                          </div>
+                      `).join('')}
+                  </div>
+              </div>
+
+              <!-- Botão Salvar -->
+              <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Salvar Alterações</button>
+          </form>
+      `;
+
+      // Adicionar evento de envio do formulário
+      document.getElementById('form-editar-reuniao').addEventListener('submit', async function (event) {
+          event.preventDefault();
+
+          const nome = document.getElementById('nome-reuniao').value;
+          const descricao = document.getElementById('descricao-reuniao').value;
+
+          const presencas = Array.from(document.querySelectorAll('#lista-chamada input')).map(input => ({
+              id: input.value,
+              status: input.checked ? 'presente' : 'ausente',
+          }));
+
+          try {
+              const response = await fetch(`/api/reunioes/${id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ nome, descricao, presencas }),
+              });
+
+              if (!response.ok) {
+                  throw new Error('Erro ao atualizar reunião.');
+              }
+
+              alert('Reunião atualizada com sucesso!');
+              carregarReunioesSalvas(); // Voltar para a lista de reuniões
+          } catch (error) {
+              console.error('Erro ao atualizar reunião:', error);
+              alert('Erro ao atualizar reunião.');
+          }
+      });
+  } catch (error) {
+      console.error('Erro ao carregar dados da reunião:', error);
+      alert('Erro ao carregar dados da reunião.');
+  }
+}

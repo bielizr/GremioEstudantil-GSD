@@ -1,123 +1,48 @@
 <!DOCTYPE html>
-<html lang="pt-br">
-
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Painel do Presidente - Grêmio GSD</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.0.0/dist/tailwind.min.css" rel="stylesheet">
-  <link href="presidente.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel do Presidente</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-
-<body class="bg-gray-100 font-sans">
-
-  <div class="flex min-h-screen">
-
-    <!-- Sidebar -->
-    <aside class="w-64 bg-blue-800 text-white p-6 flex flex-col">
-      <h1 class="text-3xl font-bold mb-10">Painel Presidente</h1>
-      <nav class="flex flex-col space-y-4 text-lg">
-        <button data-tab="calendario"
-          class="tab-btn bg-blue-700 px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-white">Calendário</button>
-        <button data-tab="comissoes"
-          class="tab-btn px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-white">Gestão de
-          Comissões</button>
-        <button data-tab="enquetes"
-          class="tab-btn px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-white">Enquetes
-          e Votações</button>
-        <button data-tab="relatorios"
-          class="tab-btn px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-white">Relatórios</button>
-        <!-- Adiciona o botão de relatórios -->
-        <button data-tab="arquivos"
-          class="tab-btn px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-white">Arquivos</button>
-          <button data-tab="presencas" class="tab-btn px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-white">Controle de Presença</button>
-      </nav>
+<body class="bg-gray-100">
+  <div class="flex h-screen">
+    <!-- Menu Lateral -->
+    <aside class="w-64 bg-blue-800 text-white flex flex-col">
+      <div class="p-4 text-center font-bold text-lg border-b border-blue-700">
+        Painel do Presidente
+      </div>
+      <nav class="flex-1 p-4">
+        <ul>
+          <li class="mb-4">
+            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700" onclick="carregarRegistroReunioes()">Registro de Reuniões</a>
+          </li>
+          <li class="mb-4">
+            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700" onclick="carregarReunioesSalvas()">Reuniões Salvas</a>
+        </li>
+          <li class="mb-4">
+            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700">Comissões</a>
+          </li>
+          <li class="mb-4">
+            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700">Upload de Arquivos</a>
+          </li>
+          <li>
+            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700">Relatórios</a>
+          </li>
+        </ul>
       </nav>
     </aside>
 
-    <!-- Conteúdo Principal -->
-    <main class="flex-1 p-8 overflow-y-auto">
-      <!-- Calendário -->
-      <section id="calendario" class="tab-content">
-        <h2 class="text-2xl font-bold mb-6">Calendário de Eventos</h2>
-
-        <!-- Formulário para adicionar evento -->
-        <form id="form-adicionar-evento" class="bg-white p-6 rounded shadow mb-6">
-          <div>
-            <label class="block font-semibold mb-1">Título do Evento:</label>
-            <input type="text" id="evento-titulo" class="w-full p-2 border rounded mb-3"
-              placeholder="Digite o título do evento" required />
-          </div>
-          <div>
-            <label class="block font-semibold mb-1">Data do Evento:</label>
-            <input type="date" id="evento-data" class="w-full p-2 border rounded mb-3" required />
-          </div>
-          <button type="submit" class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded">Adicionar
-            Evento</button>
-        </form>
-
-        <!-- Calendário de Eventos -->
-        <div id="calendario-visualizacao" class="space-y-4">
-          <!-- Aqui vamos exibir os eventos -->
-        </div>
-      </section>
-      <section id="relatorios" class="tab-content hidden">
-        <h2 class="text-2xl font-bold mb-6">Relatórios Pendentes</h2>
-        <div id="lista-relatorios" class="space-y-4">
-          <!-- Relatórios serão carregados aqui -->
-        </div>
-      </section>
-
-    <!-- Arquivos -->
-<section id="arquivos" class="tab-content hidden">
-  <h2 class="text-2xl font-bold mb-6">Arquivos Enviados</h2>
-
-  <!-- Formulário para upload de arquivos -->
-  <form id="form-upload-arquivo" class="bg-white p-6 rounded shadow">
-    <div class="mb-4">
-      <label for="tipo" class="block text-sm font-semibold">Tipo de Arquivo</label>
-      <select id="tipo" class="w-full p-2 border rounded" required>
-        <option value="Ata">Ata</option>
-        <option value="Apresentação">Apresentação</option>
-        <option value="Outro">Outro</option>
-      </select>
-    </div>
-
-    <div class="mb-4">
-      <label for="arquivo" class="block text-sm font-semibold">Selecione o Arquivo</label>
-      <input type="file" id="arquivo" name="arquivo" class="w-full p-2 border rounded" required />
-    </div>
-
-    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded">Enviar Arquivo</button>
-  </form>
-
-  <!-- Exibição dos arquivos enviados -->
-  <div id="lista-arquivos" class="space-y-4 mt-6">
-    <!-- Arquivos enviados serão carregados aqui -->
-  </div>
-
-</section>
-
-<section id="presencas" class="tab-content hidden">
-  <h2 class="text-2xl font-bold mb-6">Controle de Presença na Reunião</h2>
-  
-  <label for="data-reuniao" class="block mb-3">Data da Reunião:</label>
-  <input type="date" id="data-reuniao" class="mt-1 p-2 border rounded" required />
-  
-  <form id="form-presenca" class="space-y-4">
-    <!-- Lista de usuários será inserida aqui -->
-  </form>
-  
-  <button id="btn-salvar-presenca" class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded mt-4">Salvar Presença</button>
-  <p id="presenca-msg" class="mt-4 text-green-700 font-semibold"></p>
-</section>
-
-
-
+    <!-- Área Principal -->
+    <main class="flex-1 p-6">
+      <h1 class="text-2xl font-bold mb-4">Bem-vindo, Presidente!</h1>
+      <div id="content">
+        <!-- Aqui será carregado o conteúdo das funcionalidades -->
+        <p>Selecione uma funcionalidade no menu lateral.</p>
+      </div>
     </main>
-
   </div>
   <script src="presidente.js"></script>
 </body>
-
 </html>
