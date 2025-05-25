@@ -1,53 +1,148 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel do Presidente</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 </head>
 
 <body class="bg-gray-100">
   <div class="flex h-screen">
-    <!-- Menu Lateral -->
-    <aside class="w-64 bg-blue-800 text-white flex flex-col">
-      <div class="p-4 text-center font-bold text-lg border-b border-blue-700">
-        Painel do Presidente
+    <!-- Sidebar -->
+<aside class="w-72 bg-gradient-to-b from-blue-900 via-blue-800 to-blue-600 text-white flex flex-col">
+      <div class="flex items-center justify-center h-20 border-b border-blue-700">
+        <img src="https://img.icons8.com/ios-filled/50/ffffff/graduation-cap.png" class="w-10 h-10 mr-2" alt="Logo" />
+        <div>
+          <div class="font-bold text-xl">GSD</div>
+          <div class="text-xs opacity-70">Gestão Social Democrática</div>
+        </div>
       </div>
       <nav class="flex-1 p-4">
-        <ul>
-          <li class="mb-4">
-            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700" onclick="carregarRegistroReunioes()">Registro
-              de Reuniões</a>
-          </li>
-          <li class="mb-4">
-            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700" onclick="carregarReunioesSalvas()">Reuniões
-              Salvas</a>
-          </li>
-          <li class="mb-4">
-            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700">Comissões</a>
-          </li>
-          <li class="mb-4">
-            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700">Upload de Arquivos</a>
+        <ul class="space-y-2">
+          <li>
+            <a href="#" onclick="carregarCalendario()"
+              class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5"
+                  d="M6.75 3v2.25M17.25 3v2.25M3.75 7.5h16.5M4.5 21h15a2.25 2.25 0 002.25-2.25V7.5A2.25 2.25 0 0019.5 5.25h-15A2.25 2.25 0 002.25 7.5v11.25A2.25 2.25 0 004.5 21z">
+                </path>
+              </svg>
+              Calendário
+            </a>
           </li>
           <li>
-            <a href="#" class="block py-2 px-4 rounded hover:bg-blue-700" onclick="carregarRelatorios()">Relatórios</a>
+            <a href="#" onclick="carregarRegistroReunioes()"
+              class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5" d="M12 6v6l4 2"></path>
+                <circle cx="12" cy="12" r="10" stroke-width="1.5"></circle>
+              </svg>
+              Registro de Reuniões
+            </a>
+          </li>
+          <li>
+            <a href="#" onclick="carregarReunioesSalvas()"
+              class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5" d="M5 13l4 4L19 7"></path>
+              </svg>
+              Reuniões Salvas
+            </a>
+          </li>
+          <li>
+            <a href="#" onclick="carregarComissoes()"
+              class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5"
+                  d="M17 20h5v-2a4 4 0 00-4-4h-1m-6 6v-2a4 4 0 014-4h1m-6 6H2v-2a4 4 0 014-4h1m6-6a4 4 0 11-8 0 4 4 0 018 0zm6 4a4 4 0 11-8 0 4 4 0 018 0z">
+                </path>
+              </svg>
+              Comissões
+            </a>
+          </li>
+          <li>
+          <li>
+            <a href="#" onclick="carregarTarefas()"
+              class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5"
+                  d="M9 12h6m-6 4h6m-7.5-8.25A2.25 2.25 0 016.75 5.25h10.5A2.25 2.25 0 0119.5 7.5v11.25A2.25 2.25 0 0117.25 21H6.75A2.25 2.25 0 014.5 18.75V7.5A2.25 2.25 0 016.75 5.25z">
+                </path>
+              </svg>
+              Tarefas
+            </a>
+          </li>
+          <a href="#" onclick="carregarArquivos()"
+            class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-width="1.5"
+                d="M6.75 3A2.25 2.25 0 004.5 5.25v13.5A2.25 2.25 0 006.75 21h10.5A2.25 2.25 0 0019.5 18.75V8.25a2.25 2.25 0 00-.659-1.591l-4.5-4.5A2.25 2.25 0 0012.75 2.25H6.75z">
+              </path>
+            </svg>
+            Arquivos
+          </a>
+          </li>
+          <li>
+            <a href="#" onclick="carregarRelatorios()"
+              class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5"
+                  d="M9 12h6m-6 4h6m-7.5-8.25A2.25 2.25 0 016.75 5.25h10.5A2.25 2.25 0 0119.5 7.5v11.25A2.25 2.25 0 0117.25 21H6.75A2.25 2.25 0 014.5 18.75V7.5A2.25 2.25 0 016.75 5.25z">
+                </path>
+              </svg>
+              Relatórios
+            </a>
+          </li>
+          <li>
+            <a href="#" onclick="carregarRanking()"
+              class="flex items-center gap-3 py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5" d="M3 3v18h18"></path>
+                <path stroke-width="1.5" d="M9 17V9m4 8V5m4 12v-4"></path>
+              </svg>
+              Ranking
+            </a>
           </li>
         </ul>
       </nav>
     </aside>
-
-    <!-- Área Principal -->
-    <main class="flex-1 p-6">
-      <h1 class="text-2xl font-bold mb-4">Bem-vindo, Presidente!</h1>
-      <div id="content">
-        <!-- Aqui será carregado o conteúdo das funcionalidades -->
-        <p>Selecione uma funcionalidade no menu lateral.</p>
-      </div>
-    </main>
+    <!-- Main Area -->
+    <div class="flex-1 flex flex-col">
+      <!-- Topbar -->
+      <header class="flex items-center justify-between bg-white shadow px-8 py-4">
+        <h1 class="text-2xl font-bold">Painel do Presidente</h1>
+        <div class="flex items-center gap-4">
+          <button class="relative">
+            <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-width="1.5"
+                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9">
+              </path>
+            </svg>
+            <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+          </button>
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-gray-700">Presidente</span>
+            <span
+              class="w-9 h-9 rounded-full bg-blue-200 flex items-center justify-center text-blue-800 font-bold">PR</span>
+          </div>
+        </div>
+      </header>
+      <!-- Conteúdo dinâmico -->
+      <main class="flex-1 p-8 bg-gray-50 overflow-y-auto">
+        <div id="content"></div>
+      </main>
+    </div>
   </div>
   <script src="presidente.js"></script>
+  <script>
+    window.onload = function () {
+      carregarCalendario();
+    };
+  </script>
 </body>
 
 </html>

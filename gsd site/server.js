@@ -4,6 +4,7 @@ const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const app = express();
 const PORT = 3000;
+const fs = require('fs');
 
 app.use(cors()); // Para facilitar testes locais
 app.use(express.json());
@@ -73,6 +74,110 @@ db.serialize(() => {
         observacao TEXT,
         usuario_email TEXT
     )
+`);
+
+    // Tabela de Comissões
+    db.run(`
+  CREATE TABLE IF NOT EXISTS comissoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    tipo TEXT NOT NULL, -- 'Fixa' ou 'Temporária'
+    coordenador_id INTEGER, -- pode ser null se for um novo coordenador
+    coordenador_nome TEXT,  -- nome do coordenador (caso não seja usuário fixo)
+    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+    // Tabela de Membros da Comissão
+    db.run(`
+  CREATE TABLE IF NOT EXISTS membros_comissao (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    comissao_id INTEGER NOT NULL,
+    usuario_id INTEGER,         -- se for usuário fixo
+    nome TEXT NOT NULL,         -- nome do membro (sempre preenchido)
+    email TEXT,                 -- email do membro (opcional)
+    funcao TEXT,                -- função na comissão (opcional)
+    FOREIGN KEY (comissao_id) REFERENCES comissoes(id)
+  )
+`);
+
+    //tabela tarefas
+    db.run(`
+  CREATE TABLE IF NOT EXISTS tarefas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo TEXT NOT NULL,
+    descricao TEXT,
+    data_limite TEXT,
+    status TEXT DEFAULT 'Pendente',
+    tipo_destinatario TEXT, -- 'usuario' ou 'comissao'
+    destinatario_id INTEGER, -- id do usuário ou da comissão
+    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+    const multer = require('multer');
+    const upload = multer({ dest: 'uploads/' }); // pasta onde os arquivos ficarão
+
+    // Tabela para registrar arquivos
+    db.run(`
+  CREATE TABLE IF NOT EXISTS arquivos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome_original TEXT,
+    nome_armazenado TEXT,
+    tipo TEXT,
+    categoria TEXT,
+    data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+    // Upload de arquivo
+    app.post('/api/arquivos', upload.single('arquivo'), (req, res) => {
+        const { originalname, filename, mimetype } = req.file;
+        const { categoria } = req.body;
+        db.run(
+            `INSERT INTO arquivos (nome_original, nome_armazenado, tipo, categoria) VALUES (?, ?, ?, ?)`,
+            [originalname, filename, mimetype, categoria],
+            function (err) {
+                if (err) {
+                    console.error('Erro ao salvar arquivo:', err);
+                    return res.status(500).json({ error: 'Erro ao salvar arquivo.' });
+                }
+                res.json({ id: this.lastID });
+            }
+        );
+    });
+
+    // Listar arquivos
+    app.get('/api/arquivos', (req, res) => {
+        db.all(`SELECT * FROM arquivos ORDER BY data_upload DESC`, [], (err, rows) => {
+            if (err) {
+                console.error('Erro ao buscar arquivos:', err);
+                return res.status(500).json({ error: 'Erro ao buscar arquivos.' });
+            }
+            res.json(rows);
+        });
+    });
+
+    // Download de arquivo
+    app.get('/uploads/:nome', (req, res) => {
+        const filePath = path.join(__dirname, 'uploads', req.params.nome);
+        res.sendFile(filePath);
+    });
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+    //tabela eventos
+    db.run(`
+  CREATE TABLE IF NOT EXISTS eventos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo TEXT NOT NULL,
+    descricao TEXT,
+    inicio TEXT NOT NULL,
+    fim TEXT,
+    tipo TEXT, -- Ex: Reunião, Evento, Outro
+    criado_por TEXT,
+    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
 `);
 
     // Relatórios de exemplo
@@ -386,6 +491,325 @@ app.put('/api/relatorios/:id', (req, res) => {
             res.json({ message: 'Relatório atualizado com sucesso!' });
         }
     );
+});
+
+// Rota comissões
+// Cadastrar uma nova comissão
+app.post('/api/comissoes', (req, res) => {
+    const { nome, tipo, coordenador_id, coordenador_nome } = req.body;
+    db.run(
+        `INSERT INTO comissoes (nome, tipo, coordenador_id, coordenador_nome) VALUES (?, ?, ?, ?)`,
+        [nome, tipo, coordenador_id, coordenador_nome],
+        function (err) {
+            if (err) {
+                console.error('Erro ao cadastrar comissão:', err);
+                return res.status(500).json({ error: 'Erro ao cadastrar comissão.' });
+            }
+            res.json({ id: this.lastID });
+        }
+    );
+});
+
+// Listar todas as comissões
+app.get('/api/comissoes', (req, res) => {
+    db.all(`SELECT * FROM comissoes ORDER BY data_criacao DESC`, [], (err, rows) => {
+        if (err) {
+            console.error('Erro ao buscar comissões:', err);
+            return res.status(500).json({ error: 'Erro ao buscar comissões.' });
+        }
+        res.json(rows);
+    });
+});
+
+// Adicionar membro à comissão
+app.post('/api/membros_comissao', (req, res) => {
+    const { comissao_id, usuario_id, nome, email, funcao, senha } = req.body;
+
+    function inserirMembro(usuarioId) {
+        db.run(
+            `INSERT INTO membros_comissao (comissao_id, usuario_id, nome, email, funcao) VALUES (?, ?, ?, ?, ?)`,
+            [comissao_id, usuarioId, nome, email, funcao],
+            function (err) {
+                if (err) {
+                    console.error('Erro ao adicionar membro:', err);
+                    return res.status(500).json({ error: 'Erro ao adicionar membro.' });
+                }
+                res.json({ id: this.lastID });
+            }
+        );
+    }
+
+    if (!usuario_id) {
+        // Cria novo usuário fixo
+        db.run(
+            `INSERT INTO users (name, email, role, sector, password) VALUES (?, ?, ?, ?, ?)`,
+            [nome, email, 'membro', 'Comissão', senha],
+            function (err) {
+                if (err) {
+                    console.error('Erro ao criar usuário:', err);
+                    return res.status(500).json({ error: 'Erro ao criar usuário.' });
+                }
+                inserirMembro(this.lastID);
+            }
+        );
+    } else {
+        inserirMembro(usuario_id);
+    }
+});
+
+// Listar membros de uma comissão
+app.get('/api/comissoes/:id/membros', (req, res) => {
+    const { id } = req.params;
+    db.all(
+        `SELECT * FROM membros_comissao WHERE comissao_id = ?`,
+        [id],
+        (err, rows) => {
+            if (err) {
+                console.error('Erro ao buscar membros:', err);
+                return res.status(500).json({ error: 'Erro ao buscar membros.' });
+            }
+            res.json(rows);
+        }
+    );
+});
+
+// Editar comissão
+app.put('/api/comissoes/:id', (req, res) => {
+    const { id } = req.params;
+    const { nome, tipo, coordenador_id, coordenador_nome } = req.body;
+    db.run(
+        `UPDATE comissoes SET nome = ?, tipo = ?, coordenador_id = ?, coordenador_nome = ? WHERE id = ?`,
+        [nome, tipo, coordenador_id, coordenador_nome, id],
+        function (err) {
+            if (err) {
+                console.error('Erro ao editar comissão:', err);
+                return res.status(500).json({ error: 'Erro ao editar comissão.' });
+            }
+            res.json({ message: 'Comissão atualizada com sucesso!' });
+        }
+    );
+});
+
+// Remover comissão
+app.delete('/api/comissoes/:id', (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM comissoes WHERE id = ?`, [id], function (err) {
+        if (err) {
+            console.error('Erro ao remover comissão:', err);
+            return res.status(500).json({ error: 'Erro ao remover comissão.' });
+        }
+        // Remove também os membros dessa comissão
+        db.run(`DELETE FROM membros_comissao WHERE comissao_id = ?`, [id], function (err2) {
+            if (err2) {
+                console.error('Erro ao remover membros da comissão:', err2);
+            }
+            res.json({ message: 'Comissão removida com sucesso!' });
+        });
+    });
+});
+
+// Editar membro da comissão
+app.put('/api/membros_comissao/:id', (req, res) => {
+    const { id } = req.params;
+    const { nome, email, funcao } = req.body;
+    db.run(
+        `UPDATE membros_comissao SET nome = ?, email = ?, funcao = ? WHERE id = ?`,
+        [nome, email, funcao, id],
+        function (err) {
+            if (err) {
+                console.error('Erro ao editar membro:', err);
+                return res.status(500).json({ error: 'Erro ao editar membro.' });
+            }
+            res.json({ message: 'Membro atualizado com sucesso!' });
+        }
+    );
+});
+
+// Remover membro da comissão
+app.delete('/api/membros_comissao/:id', (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM membros_comissao WHERE id = ?`, [id], function (err) {
+        if (err) {
+            console.error('Erro ao remover membro:', err);
+            return res.status(500).json({ error: 'Erro ao remover membro.' });
+        }
+        res.json({ message: 'Membro removido com sucesso!' });
+    });
+});
+
+// Criar tarefa
+app.post('/api/tarefas', (req, res) => {
+    const { titulo, descricao, data_limite, tipo_destinatario, destinatario_id } = req.body;
+    db.run(
+        `INSERT INTO tarefas (titulo, descricao, data_limite, tipo_destinatario, destinatario_id) VALUES (?, ?, ?, ?, ?)`,
+        [titulo, descricao, data_limite, tipo_destinatario, destinatario_id],
+        function (err) {
+            if (err) {
+                console.error('Erro ao criar tarefa:', err);
+                return res.status(500).json({ error: 'Erro ao criar tarefa.' });
+            }
+            res.json({ id: this.lastID });
+        }
+    );
+});
+
+// Listar tarefas
+app.get('/api/tarefas', (req, res) => {
+    db.all(`SELECT * FROM tarefas ORDER BY data_criacao DESC`, [], (err, rows) => {
+        if (err) {
+            console.error('Erro ao buscar tarefas:', err);
+            return res.status(500).json({ error: 'Erro ao buscar tarefas.' });
+        }
+        res.json(rows);
+    });
+});
+
+// Atualizar status ou editar tarefa
+app.put('/api/tarefas/:id', (req, res) => {
+    const { id } = req.params;
+    const { titulo, descricao, data_limite, status } = req.body;
+    db.run(
+        `UPDATE tarefas SET titulo = ?, descricao = ?, data_limite = ?, status = ? WHERE id = ?`,
+        [titulo, descricao, data_limite, status, id],
+        function (err) {
+            if (err) {
+                console.error('Erro ao editar tarefa:', err);
+                return res.status(500).json({ error: 'Erro ao editar tarefa.' });
+            }
+            res.json({ message: 'Tarefa atualizada com sucesso!' });
+        }
+    );
+});
+
+// Remover tarefa
+app.delete('/api/tarefas/:id', (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM tarefas WHERE id = ?`, [id], function (err) {
+        if (err) {
+            console.error('Erro ao remover tarefa:', err);
+            return res.status(500).json({ error: 'Erro ao remover tarefa.' });
+        }
+        res.json({ message: 'Tarefa removida com sucesso!' });
+    });
+});
+
+// Editar tarefa
+app.put('/api/tarefas/:id', (req, res) => {
+    const { id } = req.params;
+    const { titulo, descricao, data_limite, tipo_destinatario, destinatario_id, status } = req.body;
+    db.run(
+        `UPDATE tarefas SET titulo = ?, descricao = ?, data_limite = ?, tipo_destinatario = ?, destinatario_id = ?, status = ? WHERE id = ?`,
+        [titulo, descricao, data_limite, tipo_destinatario, destinatario_id, status, id],
+        function (err) {
+            if (err) {
+                console.error('Erro ao editar tarefa:', err);
+                return res.status(500).json({ error: 'Erro ao editar tarefa.' });
+            }
+            res.json({ message: 'Tarefa atualizada com sucesso!' });
+        }
+    );
+});
+
+// Remover tarefa
+app.delete('/api/tarefas/:id', (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM tarefas WHERE id = ?`, [id], function (err) {
+        if (err) {
+            console.error('Erro ao remover tarefa:', err);
+            return res.status(500).json({ error: 'Erro ao remover tarefa.' });
+        }
+        res.json({ message: 'Tarefa removida com sucesso!' });
+    });
+});
+
+//rota para excluir arquivo 
+
+app.delete('/api/arquivos/:id', (req, res) => {
+    const { id } = req.params;
+    db.get(`SELECT nome_armazenado FROM arquivos WHERE id = ?`, [id], (err, row) => {
+        if (err || !row) return res.status(404).json({ error: 'Arquivo não encontrado.' });
+        const filePath = path.join(__dirname, 'uploads', row.nome_armazenado);
+        fs.unlink(filePath, () => {
+            db.run(`DELETE FROM arquivos WHERE id = ?`, [id], function (err2) {
+                if (err2) return res.status(500).json({ error: 'Erro ao excluir do banco.' });
+                res.json({ message: 'Arquivo excluído com sucesso!' });
+            });
+        });
+    });
+});
+
+// Criar evento
+app.post('/api/eventos', (req, res) => {
+  const { titulo, descricao, inicio, fim, tipo, criado_por } = req.body;
+  db.run(
+    `INSERT INTO eventos (titulo, descricao, inicio, fim, tipo, criado_por) VALUES (?, ?, ?, ?, ?, ?)`,
+    [titulo, descricao, inicio, fim, tipo, criado_por],
+    function (err) {
+      if (err) {
+        console.error('Erro ao criar evento:', err);
+        return res.status(500).json({ error: 'Erro ao criar evento.' });
+      }
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+// Listar eventos
+app.get('/api/eventos', (req, res) => {
+  db.all(`SELECT * FROM eventos ORDER BY inicio ASC`, [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar eventos:', err);
+      return res.status(500).json({ error: 'Erro ao buscar eventos.' });
+    }
+    res.json(rows);
+  });
+});
+
+// Editar evento
+app.put('/api/eventos/:id', (req, res) => {
+  const { id } = req.params;
+  const { titulo, descricao, inicio, fim, tipo } = req.body;
+  db.run(
+    `UPDATE eventos SET titulo = ?, descricao = ?, inicio = ?, fim = ?, tipo = ? WHERE id = ?`,
+    [titulo, descricao, inicio, fim, tipo, id],
+    function (err) {
+      if (err) {
+        console.error('Erro ao editar evento:', err);
+        return res.status(500).json({ error: 'Erro ao editar evento.' });
+      }
+      res.json({ message: 'Evento atualizado com sucesso!' });
+    }
+  );
+});
+
+// Remover evento
+app.delete('/api/eventos/:id', (req, res) => {
+  const { id } = req.params;
+  db.run(`DELETE FROM eventos WHERE id = ?`, [id], function (err) {
+    if (err) {
+      console.error('Erro ao remover evento:', err);
+      return res.status(500).json({ error: 'Erro ao remover evento.' });
+    }
+    res.json({ message: 'Evento removido com sucesso!' });
+  });
+});
+
+app.get('/api/ranking', (req, res) => {
+  db.all(`
+    SELECT u.id, u.name,
+      (SELECT COUNT(*) FROM presencas WHERE usuario_id = u.id) AS presencas,
+      (SELECT COUNT(*) FROM tarefas WHERE destinatario_id = u.id AND status = 'Concluída') AS tarefas_concluidas,
+      ((SELECT COUNT(*) FROM presencas WHERE usuario_id = u.id) +
+       (SELECT COUNT(*) FROM tarefas WHERE destinatario_id = u.id AND status = 'Concluída')) AS pontos
+    FROM users u
+    ORDER BY pontos DESC, u.name ASC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar ranking:', err);
+      return res.status(500).json({ error: 'Erro ao buscar ranking.' });
+    }
+    res.json(rows);
+  });
 });
 
 
