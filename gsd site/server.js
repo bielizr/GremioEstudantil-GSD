@@ -812,6 +812,22 @@ app.get('/api/ranking', (req, res) => {
   });
 });
 
+// Criar relatório
+app.post('/api/relatorios', (req, res) => {
+    const { tipo, projeto, coordenador, conteudo, observacao, usuario_email } = req.body;
+    db.run(
+        `INSERT INTO relatorios (tipo, projeto, coordenador, status, conteudo, observacao, usuario_email) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [tipo, projeto, coordenador, 'Pendente', conteudo, observacao, usuario_email],
+        function (err) {
+            if (err) {
+                console.error('Erro ao criar relatório:', err);
+                return res.status(500).json({ error: 'Erro ao criar relatório.' });
+            }
+            res.json({ id: this.lastID });
+        }
+    );
+});
+
 
 // Inicializar o servidor
 app.listen(PORT, () => {

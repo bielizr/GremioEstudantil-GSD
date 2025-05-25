@@ -1,4 +1,4 @@
-document.getElementById('login-form').addEventListener('submit', async function(e) {
+document.getElementById('login-form').addEventListener('submit', async function (e) {
     e.preventDefault();
 
     const email = document.getElementById('email').value.trim();
@@ -15,8 +15,12 @@ document.getElementById('login-form').addEventListener('submit', async function(
             alert('Credenciais inválidas.');
             return;
         }
-
         const data = await response.json();
+        localStorage.setItem('setor', data.user.sector);
+        localStorage.setItem('userId', data.user.id); // <-- Adicione esta linha aqui
+        localStorage.setItem('userEmail', data.user.email);
+
+
 
         // Redirecionar conforme papel do usuário
         if (data.user.role === 'presidente') {
