@@ -45,6 +45,13 @@ function inicializarMenuCoordenador(setor) {
               </svg>`
     },
     {
+      nome: "Relatórios Enviados",
+      href: "#relatoriosEnviados",
+      icone: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="1.5" d="M9 12h6m-6 4h6m-7.5-8.25A2.25 2.25 0 016.75 5.25h10.5A2.25 2.25 0 0119.5 7.5v11.25A2.25 2.25 0 0117.25 21H6.75A2.25 2.25 0 014.5 18.75V7.5A2.25 2.25 0 016.75 5.25z"></path>
+              </svg>`
+    },
+    {
       nome: "Ranking",
       href: "#ranking",
       icone: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -143,6 +150,23 @@ async function carregarTarefas() {
   } catch (err) {
     container.innerHTML += "<p class='text-red-600'>Erro ao carregar tarefas.</p>";
   }
+  document.querySelectorAll('.concluir-tarefa').forEach(button => {
+    button.addEventListener('click', async function () {
+      const tarefaId = this.getAttribute('data-id');
+      try {
+        await fetch(`http://localhost:3000/api/tarefas/${tarefaId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Concluída' })
+        });
+        alert('Tarefa concluída com sucesso!');
+        carregarTarefas(); // Atualiza a lista de tarefas
+      } catch (err) {
+        console.error('Erro ao concluir tarefa:', err);
+        alert('Erro ao concluir tarefa.');
+      }
+    });
+  });
 }
 
 async function carregarComissoes() {
@@ -168,20 +192,81 @@ async function carregarComissoes() {
   }
 }
 
-async function carregarRelatorios() {
+
+//relatorios 
+async function exibirFormularioRelatorio() {
   const container = document.getElementById('content');
   container.innerHTML = ""; // Limpa o conteúdo anterior
-  container.innerHTML = "<h2 class='text-xl font-bold mb-4'>Relatórios</h2>";
+  container.innerHTML = `
+    <h2 class='text-xl font-bold mb-4'>Enviar Relatório</h2>
+    <form id="form-relatorio" class="space-y-4">
+      <div>
+        <label class="block mb-1 font-semibold text-gray-700">Tipo</label>
+        <select name="tipo" class="border rounded-lg w-full p-2" required>
+          <option value="">Selecione</option>
+          <option value="Criação de Projeto">Criação de Projeto</option>
+          <option value="Relatório de Andamento">Relatório de Andamento</option>
+        </select>
+      </div>
+      <div>
+        <label class="block mb-1 font-semibold text-gray-700">Projeto</label>
+        <input type="text" name="projeto" class="border rounded-lg w-full p-2" required>
+      </div>
+      <div>
+        <label class="block mb-1 font-semibold text-gray-700">Conteúdo</label>
+        <textarea name="conteudo" class="border rounded-lg w-full p-2" required></textarea>
+      </div>
+      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition">Enviar</button>
+    </form>
+  `;
+
+  document.getElementById('form-relatorio').onsubmit = async function (e) {
+    e.preventDefault();
+    const form = e.target;
+    const userEmail = localStorage.getItem('userEmail'); // Certifique-se de salvar o email do coordenador no localStorage durante o login
+
+    try {
+      await fetch('http://localhost:3000/api/relatorios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: form.tipo.value,
+          projeto: form.projeto.value,
+          coordenador: userEmail, // Email do coordenador
+          conteudo: form.conteudo.value,
+          observacao: "", // Inicialmente vazio
+          usuario_email: userEmail
+        })
+      });
+      alert('Relatório enviado com sucesso!');
+      exibirFormularioRelatorio(); // Limpa o formulário após envio
+    } catch (err) {
+      console.error('Erro ao enviar relatório:', err);
+      alert('Erro ao enviar relatório.');
+    }
+  };
+}
+
+async function carregarRelatoriosAtualizados() {
+  const container = document.getElementById('content');
+  container.innerHTML = ""; // Limpa o conteúdo anterior
+  container.innerHTML = "<h2 class='text-xl font-bold mb-4'>Relatórios Enviados</h2>";
 
   try {
     const res = await fetch('http://localhost:3000/api/relatorios');
     const relatorios = await res.json();
 
-    const lista = relatorios.map(relatorio => `
+    const userEmail = localStorage.getItem('userEmail'); // Email do coordenador logado
+
+    // Filtra os relatórios que pertencem ao coordenador logado
+    const relatoriosFiltrados = relatorios.filter(relatorio => relatorio.usuario_email === userEmail);
+
+    const lista = relatoriosFiltrados.map(relatorio => `
       <div class="bg-white shadow rounded-lg p-4 mb-4">
         <h3 class="font-semibold text-blue-800">${relatorio.tipo}</h3>
         <p class="text-gray-600 text-sm">${relatorio.projeto}</p>
         <p class="text-gray-500 text-xs">Status: ${relatorio.status}</p>
+        <p class="text-gray-500 text-xs">Observação: ${relatorio.observacao || 'Nenhuma'}</p>
       </div>
     `).join('');
 
@@ -190,6 +275,188 @@ async function carregarRelatorios() {
     container.innerHTML += "<p class='text-red-600'>Erro ao carregar relatórios.</p>";
   }
 }
+
+//ranking
+async function carregarRanking() {
+  document.getElementById('content').innerHTML = `
+    <div class="max-w-3xl mx-auto bg-white rounded-xl shadow p-8">
+      <h2 class="text-2xl font-bold mb-6 text-blue-800 flex items-center gap-2">
+        <svg class="w-7 h-7 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-width="1.5" d="M12 17.5l-5.09 2.68 1-5.82-4.22-4.11 5.84-.85L12 4.5l2.47 5.01 5.84.85-4.22 4.11 1 5.82z"></path>
+        </svg>
+        Ranking de Engajamento
+      </h2>
+      <div id="lista-ranking"></div>
+    </div>
+  `;
+  const resp = await fetch('/api/ranking');
+  const ranking = await resp.json();
+  const lista = document.getElementById('lista-ranking');
+  if (ranking.length === 0) {
+    lista.innerHTML = `<p class="text-gray-500 text-center">Nenhum dado de engajamento ainda.</p>`;
+    return;
+  }
+  lista.innerHTML = `
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm bg-white rounded-xl overflow-hidden shadow">
+        <thead>
+          <tr class="bg-blue-50">
+            <th class="px-4 py-2 text-left">Posição</th>
+            <th class="px-4 py-2 text-left">Nome</th>
+            <th class="px-4 py-2 text-left">Presenças</th>
+            <th class="px-4 py-2 text-left">Tarefas Concluídas</th>
+            <th class="px-4 py-2 text-left">Pontos</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${ranking.map((u, i) => `
+            <tr class="${i === 0 ? 'bg-yellow-50 font-bold' : ''}">
+              <td class="border-t px-4 py-2">${i + 1} ${i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''}</td>
+              <td class="border-t px-4 py-2">${u.name}</td>
+              <td class="border-t px-4 py-2">${u.presencas}</td>
+              <td class="border-t px-4 py-2">${u.tarefas_concluidas}</td>
+              <td class="border-t px-4 py-2 text-blue-800">${u.pontos}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+//cantina
+
+async function carregarCantina() {
+  const container = document.getElementById('content');
+  container.innerHTML = ""; // Limpa o conteúdo anterior
+
+  container.innerHTML = `
+    <h2 class='text-xl font-bold mb-4'>PDV - Cantina</h2>
+    <div class="space-y-6">
+      <!-- Cadastro de Produtos -->
+      <div>
+        <h3 class="text-lg font-semibold mb-2">Cadastrar Produto</h3>
+        <form id="form-produto" class="space-y-4">
+          <div>
+            <label class="block mb-1 font-semibold text-gray-700">Nome do Produto</label>
+            <input type="text" name="nome" class="border rounded-lg w-full p-2" required>
+          </div>
+          <div>
+            <label class="block mb-1 font-semibold text-gray-700">Preço</label>
+            <input type="number" name="preco" class="border rounded-lg w-full p-2" required>
+          </div>
+          <div>
+            <label class="block mb-1 font-semibold text-gray-700">Quantidade</label>
+            <input type="number" name="quantidade" class="border rounded-lg w-full p-2" required>
+          </div>
+          <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition">Cadastrar</button>
+        </form>
+      </div>
+
+      <!-- Estoque -->
+      <div>
+        <h3 class="text-lg font-semibold mb-2">Estoque</h3>
+        <div id="estoque"></div>
+      </div>
+
+      <!-- Painel de Venda -->
+      <div>
+        <h3 class="text-lg font-semibold mb-2">Painel de Venda</h3>
+        <div id="painel-venda"></div>
+        <div class="mt-4">
+          <label class="block mb-1 font-semibold text-gray-700">Valor Recebido</label>
+          <input type="number" id="valor-recebido" class="border rounded-lg w-full p-2">
+          <button id="finalizar-venda" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition mt-2">Finalizar Venda</button>
+        </div>
+        <p id="troco" class="text-lg font-bold mt-4"></p>
+      </div>
+    </div>
+  `;
+
+  // Configura o formulário de cadastro de produtos
+  document.getElementById('form-produto').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const form = e.target;
+
+    try {
+      await fetch('http://localhost:3000/api/produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: form.nome.value,
+          preco: parseFloat(form.preco.value),
+          quantidade: parseInt(form.quantidade.value)
+        })
+      });
+      alert('Produto cadastrado com sucesso!');
+      carregarCantina(); // Atualiza a tela
+    } catch (err) {
+      console.error('Erro ao cadastrar produto:', err);
+      alert('Erro ao cadastrar produto.');
+    }
+  });
+
+  // Carrega o estoque
+  try {
+    const res = await fetch('http://localhost:3000/api/produtos');
+    const produtos = await res.json();
+
+    const estoque = produtos.map(produto => `
+      <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <h3 class="font-semibold text-blue-800">${produto.nome}</h3>
+        <p class="text-gray-600 text-sm">Preço: R$ ${produto.preco.toFixed(2)}</p>
+        <p class="text-gray-500 text-xs">Quantidade: ${produto.quantidade}</p>
+      </div>
+    `).join('');
+
+    document.getElementById('estoque').innerHTML = estoque || "<p class='text-gray-500'>Nenhum produto disponível.</p>";
+  } catch (err) {
+    document.getElementById('estoque').innerHTML = "<p class='text-red-600'>Erro ao carregar estoque.</p>";
+  }
+
+  // Configura o painel de venda
+  try {
+    const res = await fetch('http://localhost:3000/api/produtos');
+    const produtos = await res.json();
+
+    const painelVenda = produtos.map(produto => `
+      <button class="produto-venda bg-gray-200 hover:bg-gray-300 text-black px-4 py-2 rounded-lg font-semibold transition" data-id="${produto.id}" data-preco="${produto.preco}">
+        ${produto.nome} - R$ ${produto.preco.toFixed(2)}
+      </button>
+    `).join('');
+
+    document.getElementById('painel-venda').innerHTML = painelVenda || "<p class='text-gray-500'>Nenhum produto disponível.</p>";
+
+    let total = 0;
+    document.querySelectorAll('.produto-venda').forEach(button => {
+      button.addEventListener('click', function () {
+        const preco = parseFloat(this.getAttribute('data-preco'));
+        total += preco;
+        document.getElementById('troco').textContent = `Total: R$ ${total.toFixed(2)}`;
+      });
+    });
+
+    document.getElementById('finalizar-venda').addEventListener('click', async function () {
+      const valorRecebido = parseFloat(document.getElementById('valor-recebido').value);
+      const troco = valorRecebido - total;
+
+      if (troco < 0) {
+        alert('Valor recebido insuficiente!');
+        return;
+      }
+
+      alert(`Venda finalizada! Troco: R$ ${troco.toFixed(2)}`);
+      total = 0; // Reseta o total
+      document.getElementById('troco').textContent = "";
+      document.getElementById('valor-recebido').value = "";
+      carregarCantina(); // Atualiza a tela
+    });
+  } catch (err) {
+    document.getElementById('painel-venda').innerHTML = "<p class='text-red-600'>Erro ao carregar painel de venda.</p>";
+  }
+}
+
+
 
 // Adiciona eventos de clique para o menu
 document.addEventListener('click', function (e) {
@@ -200,5 +467,8 @@ document.addEventListener('click', function (e) {
   if (href === '#arquivos') carregarArquivos();
   else if (href === '#tarefas') carregarTarefas();
   else if (href === '#comissoes') carregarComissoes();
-  else if (href === '#relatorios') carregarRelatorios();
+  else if (href === '#relatorios') exibirFormularioRelatorio(); // Chama o formulário de envio
+  else if (href === '#relatoriosEnviados') carregarRelatoriosAtualizados(); // Carrega relatórios enviados
+  else if (href === '#ranking')  carregarRanking(); // Carrega ranking
+  else if (href === '#cantina') carregarCantina(); // Carrega a aba Cantina
 });

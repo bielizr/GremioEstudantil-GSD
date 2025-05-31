@@ -165,7 +165,6 @@ db.serialize(() => {
     });
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-
     //tabela eventos
     db.run(`
   CREATE TABLE IF NOT EXISTS eventos (
@@ -179,6 +178,28 @@ db.serialize(() => {
     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
 `);
+
+// Tabela de Produtos
+db.run(`
+    CREATE TABLE IF NOT EXISTS produtos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      preco REAL NOT NULL,
+      quantidade INTEGER NOT NULL
+    )
+  `);
+  
+  // Tabela de Vendas
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vendas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      produtos TEXT NOT NULL,
+      total REAL NOT NULL,
+      valorRecebido REAL NOT NULL,
+      troco REAL NOT NULL,
+      data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
     // Relatórios de exemplo
     const relatoriosExemplo = [
@@ -668,28 +689,43 @@ app.get('/api/tarefas', (req, res) => {
 app.put('/api/tarefas/:id', (req, res) => {
     const { id } = req.params;
     const { titulo, descricao, data_limite, status } = req.body;
-    db.run(
-        `UPDATE tarefas SET titulo = ?, descricao = ?, data_limite = ?, status = ? WHERE id = ?`,
-        [titulo, descricao, data_limite, status, id],
-        function (err) {
-            if (err) {
-                console.error('Erro ao editar tarefa:', err);
-                return res.status(500).json({ error: 'Erro ao editar tarefa.' });
-            }
-            res.json({ message: 'Tarefa atualizada com sucesso!' });
-        }
-    );
-});
 
-// Remover tarefa
-app.delete('/api/tarefas/:id', (req, res) => {
-    const { id } = req.params;
-    db.run(`DELETE FROM tarefas WHERE id = ?`, [id], function (err) {
+    // Construir dinamicamente a query SQL com base nos campos enviados
+    const updates = [];
+    const values = [];
+
+    if (titulo !== undefined) {
+        updates.push('titulo = ?');
+        values.push(titulo);
+    }
+    if (descricao !== undefined) {
+        updates.push('descricao = ?');
+        values.push(descricao);
+    }
+    if (data_limite !== undefined) {
+        updates.push('data_limite = ?');
+        values.push(data_limite);
+    }
+    if (status !== undefined) {
+        updates.push('status = ?');
+        values.push(status);
+    }
+
+    // Se nenhum campo foi enviado, retorna erro
+    if (updates.length === 0) {
+        return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+    }
+
+    values.push(id); // Adiciona o ID ao final dos valores
+
+    const query = `UPDATE tarefas SET ${updates.join(', ')} WHERE id = ?`;
+
+    db.run(query, values, function (err) {
         if (err) {
-            console.error('Erro ao remover tarefa:', err);
-            return res.status(500).json({ error: 'Erro ao remover tarefa.' });
+            console.error('Erro ao editar tarefa:', err);
+            return res.status(500).json({ error: 'Erro ao editar tarefa.' });
         }
-        res.json({ message: 'Tarefa removida com sucesso!' });
+        res.json({ message: 'Tarefa atualizada com sucesso!' });
     });
 });
 
@@ -827,6 +863,33 @@ app.post('/api/relatorios', (req, res) => {
         }
     );
 });
+
+// Rota para listar produtos
+app.get('/api/produtos', (req, res) => {
+    db.all(`SELECT * FROM produtos ORDER BY nome ASC`, [], (err, rows) => {
+      if (err) {
+        console.error('Erro ao buscar produtos:', err);
+        return res.status(500).json({ error: 'Erro ao buscar produtos.' });
+      }
+      res.json(rows);
+    });
+  });
+  
+  // Rota para salvar vendas
+  app.post('/api/vendas', (req, res) => {
+    const { produtos, total, valorRecebido, troco } = req.body;
+    db.run(
+      `INSERT INTO vendas (produtos, total, valorRecebido, troco) VALUES (?, ?, ?, ?)`,
+      [JSON.stringify(produtos), total, valorRecebido, troco],
+      function (err) {
+        if (err) {
+          console.error('Erro ao salvar venda:', err);
+          return res.status(500).json({ error: 'Erro ao salvar venda.' });
+        }
+        res.json({ id: this.lastID });
+      }
+    );
+  });
 
 
 // Inicializar o servidor
