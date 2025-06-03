@@ -325,50 +325,63 @@ async function carregarRanking() {
 }
 
 //cantina
-
 async function carregarCantina() {
   const container = document.getElementById('content');
   container.innerHTML = ""; // Limpa o conteúdo anterior
 
   container.innerHTML = `
-    <h2 class='text-xl font-bold mb-4'>PDV - Cantina</h2>
-    <div class="space-y-6">
-      <!-- Cadastro de Produtos -->
-      <div>
-        <h3 class="text-lg font-semibold mb-2">Cadastrar Produto</h3>
-        <form id="form-produto" class="space-y-4">
-          <div>
-            <label class="block mb-1 font-semibold text-gray-700">Nome do Produto</label>
-            <input type="text" name="nome" class="border rounded-lg w-full p-2" required>
-          </div>
-          <div>
-            <label class="block mb-1 font-semibold text-gray-700">Preço</label>
-            <input type="number" name="preco" class="border rounded-lg w-full p-2" required>
-          </div>
-          <div>
-            <label class="block mb-1 font-semibold text-gray-700">Quantidade</label>
-            <input type="number" name="quantidade" class="border rounded-lg w-full p-2" required>
-          </div>
-          <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition">Cadastrar</button>
-        </form>
-      </div>
-
-      <!-- Estoque -->
-      <div>
-        <h3 class="text-lg font-semibold mb-2">Estoque</h3>
-        <div id="estoque"></div>
-      </div>
-
-      <!-- Painel de Venda -->
-      <div>
-        <h3 class="text-lg font-semibold mb-2">Painel de Venda</h3>
-        <div id="painel-venda"></div>
-        <div class="mt-4">
-          <label class="block mb-1 font-semibold text-gray-700">Valor Recebido</label>
-          <input type="number" id="valor-recebido" class="border rounded-lg w-full p-2">
-          <button id="finalizar-venda" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition mt-2">Finalizar Venda</button>
+    <div class="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen p-6">
+      <!-- Cabeçalho -->
+      <header class="flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h11M9 21V3m12 10h-4m4 0l-4-4m4 4l-4 4"></path>
+          </svg>
+          PDV - Cantina
+        </h1>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Bem-vindo ao sistema de vendas!</span>
         </div>
-        <p id="troco" class="text-lg font-bold mt-4"></p>
+      </header>
+
+      <div class="mt-8 space-y-10">
+        <!-- Cadastro de Produtos -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Cadastrar Produto</h2>
+          <form id="form-produto" class="space-y-6">
+            <div>
+              <label class="block mb-2 font-semibold text-gray-700">Nome do Produto</label>
+              <input type="text" name="nome" class="border rounded-lg w-full p-3 focus:ring focus:ring-blue-300" placeholder="Ex: Refrigerante" required>
+            </div>
+            <div>
+              <label class="block mb-2 font-semibold text-gray-700">Preço</label>
+              <input type="number" name="preco" class="border rounded-lg w-full p-3 focus:ring focus:ring-blue-300" placeholder="Ex: 5.00" required>
+            </div>
+            <div>
+              <label class="block mb-2 font-semibold text-gray-700">Quantidade</label>
+              <input type="number" name="quantidade" class="border rounded-lg w-full p-3 focus:ring focus:ring-blue-300" placeholder="Ex: 10" required>
+            </div>
+            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition shadow-lg">Cadastrar</button>
+          </form>
+        </section>
+
+        <!-- Estoque -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Estoque</h2>
+          <div id="estoque" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+
+        <!-- Painel de Venda -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Painel de Venda</h2>
+          <div id="painel-venda" class="flex flex-wrap gap-4"></div>
+          <div class="mt-6">
+            <label class="block mb-2 font-semibold text-gray-700">Valor Recebido</label>
+            <input type="number" id="valor-recebido" class="border rounded-lg w-full p-3 focus:ring focus:ring-blue-300" placeholder="Ex: 50.00">
+            <button id="finalizar-venda" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition shadow-lg mt-4">Finalizar Venda</button>
+          </div>
+          <p id="troco" class="text-xl font-bold mt-6 text-green-600"></p>
+        </section>
       </div>
     </div>
   `;
@@ -379,7 +392,7 @@ async function carregarCantina() {
     const form = e.target;
 
     try {
-      await fetch('http://localhost:3000/api/produtos', {
+      const response = await fetch('http://localhost:3000/api/produtos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -388,6 +401,11 @@ async function carregarCantina() {
           quantidade: parseInt(form.quantidade.value)
         })
       });
+
+      if (!response.ok) {
+        throw new Error('Erro ao cadastrar produto.');
+      }
+
       alert('Produto cadastrado com sucesso!');
       carregarCantina(); // Atualiza a tela
     } catch (err) {
@@ -396,13 +414,14 @@ async function carregarCantina() {
     }
   });
 
-  // Carrega o estoque
+  // Carrega o estoque e o painel de venda
   try {
     const res = await fetch('http://localhost:3000/api/produtos');
     const produtos = await res.json();
 
+    // Atualiza o estoque
     const estoque = produtos.map(produto => `
-      <div class="bg-white shadow rounded-lg p-4 mb-4">
+      <div class="bg-gray-50 border rounded-lg p-4 shadow hover:shadow-lg transition">
         <h3 class="font-semibold text-blue-800">${produto.nome}</h3>
         <p class="text-gray-600 text-sm">Preço: R$ ${produto.preco.toFixed(2)}</p>
         <p class="text-gray-500 text-xs">Quantidade: ${produto.quantidade}</p>
@@ -410,15 +429,8 @@ async function carregarCantina() {
     `).join('');
 
     document.getElementById('estoque').innerHTML = estoque || "<p class='text-gray-500'>Nenhum produto disponível.</p>";
-  } catch (err) {
-    document.getElementById('estoque').innerHTML = "<p class='text-red-600'>Erro ao carregar estoque.</p>";
-  }
 
-  // Configura o painel de venda
-  try {
-    const res = await fetch('http://localhost:3000/api/produtos');
-    const produtos = await res.json();
-
+    // Atualiza o painel de venda
     const painelVenda = produtos.map(produto => `
       <button class="produto-venda bg-gray-200 hover:bg-gray-300 text-black px-4 py-2 rounded-lg font-semibold transition" data-id="${produto.id}" data-preco="${produto.preco}">
         ${produto.nome} - R$ ${produto.preco.toFixed(2)}
@@ -452,11 +464,11 @@ async function carregarCantina() {
       carregarCantina(); // Atualiza a tela
     });
   } catch (err) {
+    console.error('Erro ao carregar produtos:', err);
+    document.getElementById('estoque').innerHTML = "<p class='text-red-600'>Erro ao carregar estoque.</p>";
     document.getElementById('painel-venda').innerHTML = "<p class='text-red-600'>Erro ao carregar painel de venda.</p>";
   }
 }
-
-
 
 // Adiciona eventos de clique para o menu
 document.addEventListener('click', function (e) {

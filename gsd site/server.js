@@ -182,24 +182,26 @@ db.serialize(() => {
 // Tabela de Produtos
 db.run(`
     CREATE TABLE IF NOT EXISTS produtos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT NOT NULL,
-      preco REAL NOT NULL,
-      quantidade INTEGER NOT NULL
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        preco REAL NOT NULL,
+        quantidade INTEGER NOT NULL
     )
-  `);
-  
-  // Tabela de Vendas
-  db.run(`
+`);
+
+// Tabela de Vendas
+db.run(`
     CREATE TABLE IF NOT EXISTS vendas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      produtos TEXT NOT NULL,
-      total REAL NOT NULL,
-      valorRecebido REAL NOT NULL,
-      troco REAL NOT NULL,
-      data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        produtos TEXT NOT NULL,
+        total REAL NOT NULL,
+        valorRecebido REAL NOT NULL,
+        troco REAL NOT NULL,
+        data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-  `);
+`);
+
+
 
     // Relatórios de exemplo
     const relatoriosExemplo = [
@@ -864,32 +866,49 @@ app.post('/api/relatorios', (req, res) => {
     );
 });
 
+
 // Rota para listar produtos
 app.get('/api/produtos', (req, res) => {
-    db.all(`SELECT * FROM produtos ORDER BY nome ASC`, [], (err, rows) => {
-      if (err) {
-        console.error('Erro ao buscar produtos:', err);
-        return res.status(500).json({ error: 'Erro ao buscar produtos.' });
-      }
-      res.json(rows);
+    db.all(`SELECT * FROM produtos ORDER BY id ASC`, [], (err, rows) => {
+        if (err) {
+            console.error('Erro ao buscar produtos:', err);
+            return res.status(500).json({ error: 'Erro ao buscar produtos.' });
+        }
+        res.json(rows);
     });
-  });
-  
-  // Rota para salvar vendas
-  app.post('/api/vendas', (req, res) => {
+});
+
+// Rota para cadastrar produtos
+app.post('/api/produtos', (req, res) => {
+    const { nome, preco, quantidade } = req.body;
+    db.run(
+        `INSERT INTO produtos (nome, preco, quantidade) VALUES (?, ?, ?)`,
+        [nome, preco, quantidade],
+        function (err) {
+            if (err) {
+                console.error('Erro ao salvar produto:', err);
+                return res.status(500).json({ error: 'Erro ao salvar produto.' });
+            }
+            res.json({ id: this.lastID });
+        }
+    );
+});
+
+// Rota para registrar vendas
+app.post('/api/vendas', (req, res) => {
     const { produtos, total, valorRecebido, troco } = req.body;
     db.run(
-      `INSERT INTO vendas (produtos, total, valorRecebido, troco) VALUES (?, ?, ?, ?)`,
-      [JSON.stringify(produtos), total, valorRecebido, troco],
-      function (err) {
-        if (err) {
-          console.error('Erro ao salvar venda:', err);
-          return res.status(500).json({ error: 'Erro ao salvar venda.' });
+        `INSERT INTO vendas (produtos, total, valorRecebido, troco) VALUES (?, ?, ?, ?)`,
+        [JSON.stringify(produtos), total, valorRecebido, troco],
+        function (err) {
+            if (err) {
+                console.error('Erro ao salvar venda:', err);
+                return res.status(500).json({ error: 'Erro ao salvar venda.' });
+            }
+            res.json({ id: this.lastID });
         }
-        res.json({ id: this.lastID });
-      }
     );
-  });
+});
 
 
 // Inicializar o servidor
