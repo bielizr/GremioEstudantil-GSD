@@ -93,43 +93,91 @@ window.addEventListener('DOMContentLoaded', () => {
   inicializarMenuCoordenador(setor);
 });
 
+//arquivos 
+
 // Funções para carregar conteúdo dinâmico
 async function carregarArquivos() {
   const container = document.getElementById('content');
   container.innerHTML = ""; // Limpa o conteúdo anterior
-  container.innerHTML = "<h2 class='text-xl font-bold mb-4'>Arquivos enviados pelo presidente</h2>";
+
+  container.innerHTML = `
+    <div class="bg-gray-100 min-h-screen p-6">
+      <!-- Cabeçalho -->
+      <header class="flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2zm2 0h12v16H6V4zm7 9h5v2h-5v-2zm-7 0h5v2H6v-2z"></path>
+          </svg>
+          Arquivos Enviados pelo Presidente
+        </h1>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Visualize e baixe os arquivos enviados!</span>
+        </div>
+      </header>
+
+      <div class="mt-8 space-y-6">
+        <!-- Lista de Arquivos -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Arquivos Disponíveis</h2>
+          <div id="lista-arquivos" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+      </div>
+    </div>
+  `;
 
   try {
     const res = await fetch('http://localhost:3000/api/arquivos');
     const arquivos = await res.json();
 
-    if (arquivos.length === 0) {
-      container.innerHTML += "<p>Nenhum arquivo disponível.</p>";
-      return;
-    }
-
     const lista = arquivos.map(arq => `
-      <div class="bg-white shadow rounded-lg p-4 mb-4">
+      <div class="bg-gray-50 border rounded-lg p-4 shadow hover:shadow-lg transition">
         <h3 class="font-semibold text-blue-800">${arq.nome_original}</h3>
         <p class="text-gray-600 text-sm">Data de upload: ${new Date(arq.data_upload).toLocaleString()}</p>
-        <a href="http://localhost:3000/uploads/${arq.nome_armazenado}" class="text-blue-600 hover:underline" download>Baixar</a>
+        <a href="http://localhost:3000/uploads/${arq.nome_armazenado}" class="text-blue-600 hover:underline font-semibold" download>
+          Baixar Arquivo
+        </a>
       </div>
     `).join('');
 
-    container.innerHTML += lista;
+    document.getElementById('lista-arquivos').innerHTML = lista || "<p class='text-gray-500'>Nenhum arquivo disponível.</p>";
   } catch (err) {
-    container.innerHTML += "<p class='text-red-600'>Erro ao carregar arquivos.</p>";
+    document.getElementById('lista-arquivos').innerHTML = "<p class='text-red-600'>Erro ao carregar arquivos.</p>";
   }
 }
 
+//tarefas
 async function carregarTarefas() {
   const container = document.getElementById('content');
   container.innerHTML = ""; // Limpa o conteúdo anterior
-  container.innerHTML = "<h2 class='text-xl font-bold mb-4'>Minhas Tarefas</h2>";
+
+  container.innerHTML = `
+    <div class="bg-gray-100 min-h-screen p-6">
+      <!-- Cabeçalho -->
+      <header class="flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m-7 4h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          Minhas Tarefas
+        </h1>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Gerencie suas tarefas com facilidade!</span>
+        </div>
+      </header>
+
+      <div class="mt-8 space-y-6">
+        <!-- Lista de Tarefas -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Tarefas Pendentes</h2>
+          <div id="tarefas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+      </div>
+    </div>
+  `;
 
   const userId = localStorage.getItem('userId');
   if (!userId) {
-    container.innerHTML += "<p class='text-red-600'>Usuário não identificado.</p>";
+    document.getElementById('tarefas').innerHTML = "<p class='text-red-600'>Usuário não identificado.</p>";
     return;
   }
 
@@ -138,18 +186,21 @@ async function carregarTarefas() {
     const tarefas = await res.json();
 
     const lista = tarefas.map(tarefa => `
-      <div class="bg-white shadow rounded-lg p-4 mb-4">
+      <div class="bg-gray-50 border rounded-lg p-4 shadow hover:shadow-lg transition">
         <h3 class="font-semibold text-blue-800">${tarefa.titulo}</h3>
         <p class="text-gray-600 text-sm">${tarefa.descricao}</p>
         <p class="text-gray-500 text-xs">Data limite: ${tarefa.data_limite}</p>
-        <button class="concluir-tarefa bg-green-600 text-white px-4 py-2 rounded-lg mt-2" data-id="${tarefa.id}">Concluir</button>
+        <button class="concluir-tarefa bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg mt-2 transition" data-id="${tarefa.id}">
+          Concluir
+        </button>
       </div>
     `).join('');
 
-    container.innerHTML += lista || "<p class='text-gray-500'>Nenhuma tarefa disponível.</p>";
+    document.getElementById('tarefas').innerHTML = lista || "<p class='text-gray-500'>Nenhuma tarefa disponível.</p>";
   } catch (err) {
-    container.innerHTML += "<p class='text-red-600'>Erro ao carregar tarefas.</p>";
+    document.getElementById('tarefas').innerHTML = "<p class='text-red-600'>Erro ao carregar tarefas.</p>";
   }
+
   document.querySelectorAll('.concluir-tarefa').forEach(button => {
     button.addEventListener('click', async function () {
       const tarefaId = this.getAttribute('data-id');
@@ -169,55 +220,52 @@ async function carregarTarefas() {
   });
 }
 
-async function carregarComissoes() {
-  const container = document.getElementById('content');
-  container.innerHTML = ""; // Limpa o conteúdo anterior
-  container.innerHTML = "<h2 class='text-xl font-bold mb-4'>Minhas Comissões</h2>";
 
-  try {
-    const res = await fetch('http://localhost:3000/api/comissoes');
-    const comissoes = await res.json();
-
-    const lista = comissoes.map(comissao => `
-      <div class="bg-white shadow rounded-lg p-4 mb-4">
-        <h3 class="font-semibold text-blue-800">${comissao.nome}</h3>
-        <p class="text-gray-600 text-sm">${comissao.descricao}</p>
-        <button class="lancar-tarefa bg-blue-600 text-white px-4 py-2 rounded-lg mt-2" data-id="${comissao.id}">Lançar Tarefa</button>
-      </div>
-    `).join('');
-
-    container.innerHTML += lista || "<p class='text-gray-500'>Nenhuma comissão disponível.</p>";
-  } catch (err) {
-    container.innerHTML += "<p class='text-red-600'>Erro ao carregar comissões.</p>";
-  }
-}
-
-
-//relatorios 
+// Relatórios
 async function exibirFormularioRelatorio() {
   const container = document.getElementById('content');
   container.innerHTML = ""; // Limpa o conteúdo anterior
   container.innerHTML = `
-    <h2 class='text-xl font-bold mb-4'>Enviar Relatório</h2>
-    <form id="form-relatorio" class="space-y-4">
-      <div>
-        <label class="block mb-1 font-semibold text-gray-700">Tipo</label>
-        <select name="tipo" class="border rounded-lg w-full p-2" required>
-          <option value="">Selecione</option>
-          <option value="Criação de Projeto">Criação de Projeto</option>
-          <option value="Relatório de Andamento">Relatório de Andamento</option>
-        </select>
+    <div class="bg-gray-100 min-h-screen p-6">
+      <!-- Cabeçalho -->
+      <header class="flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m-7 4h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          Enviar Relatório
+        </h1>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Envie relatórios com facilidade!</span>
+        </div>
+      </header>
+
+      <div class="mt-8 space-y-6">
+        <!-- Formulário de Relatório -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Preencha os detalhes do relatório</h2>
+          <form id="form-relatorio" class="space-y-6">
+            <div>
+              <label class="block mb-2 font-semibold text-gray-700">Tipo</label>
+              <select name="tipo" class="border rounded-lg w-full p-3 focus:ring focus:ring-blue-300" required>
+                <option value="">Selecione</option>
+                <option value="Criação de Projeto">Criação de Projeto</option>
+                <option value="Relatório de Andamento">Relatório de Andamento</option>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-2 font-semibold text-gray-700">Projeto</label>
+              <input type="text" name="projeto" class="border rounded-lg w-full p-3 focus:ring focus:ring-blue-300" placeholder="Ex: Feira de Ciências" required>
+            </div>
+            <div>
+              <label class="block mb-2 font-semibold text-gray-700">Conteúdo</label>
+              <textarea name="conteudo" class="border rounded-lg w-full p-3 focus:ring focus:ring-blue-300" placeholder="Descreva o relatório..." required></textarea>
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition shadow-lg">Enviar</button>
+          </form>
+        </section>
       </div>
-      <div>
-        <label class="block mb-1 font-semibold text-gray-700">Projeto</label>
-        <input type="text" name="projeto" class="border rounded-lg w-full p-2" required>
-      </div>
-      <div>
-        <label class="block mb-1 font-semibold text-gray-700">Conteúdo</label>
-        <textarea name="conteudo" class="border rounded-lg w-full p-2" required></textarea>
-      </div>
-      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition">Enviar</button>
-    </form>
+    </div>
   `;
 
   document.getElementById('form-relatorio').onsubmit = async function (e) {
@@ -250,7 +298,30 @@ async function exibirFormularioRelatorio() {
 async function carregarRelatoriosAtualizados() {
   const container = document.getElementById('content');
   container.innerHTML = ""; // Limpa o conteúdo anterior
-  container.innerHTML = "<h2 class='text-xl font-bold mb-4'>Relatórios Enviados</h2>";
+  container.innerHTML = `
+    <div class="bg-gray-100 min-h-screen p-6">
+      <!-- Cabeçalho -->
+      <header class="flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m-7 4h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          Relatórios Enviados
+        </h1>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Visualize seus relatórios enviados!</span>
+        </div>
+      </header>
+
+      <div class="mt-8 space-y-6">
+        <!-- Lista de Relatórios -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Relatórios</h2>
+          <div id="relatorios" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+      </div>
+    </div>
+  `;
 
   try {
     const res = await fetch('http://localhost:3000/api/relatorios');
@@ -262,7 +333,7 @@ async function carregarRelatoriosAtualizados() {
     const relatoriosFiltrados = relatorios.filter(relatorio => relatorio.usuario_email === userEmail);
 
     const lista = relatoriosFiltrados.map(relatorio => `
-      <div class="bg-white shadow rounded-lg p-4 mb-4">
+      <div class="bg-gray-50 border rounded-lg p-4 shadow hover:shadow-lg transition">
         <h3 class="font-semibold text-blue-800">${relatorio.tipo}</h3>
         <p class="text-gray-600 text-sm">${relatorio.projeto}</p>
         <p class="text-gray-500 text-xs">Status: ${relatorio.status}</p>
@@ -270,57 +341,71 @@ async function carregarRelatoriosAtualizados() {
       </div>
     `).join('');
 
-    container.innerHTML += lista || "<p class='text-gray-500'>Nenhum relatório disponível.</p>";
+    document.getElementById('relatorios').innerHTML = lista || "<p class='text-gray-500'>Nenhum relatório disponível.</p>";
   } catch (err) {
-    container.innerHTML += "<p class='text-red-600'>Erro ao carregar relatórios.</p>";
+    document.getElementById('relatorios').innerHTML = "<p class='text-red-600'>Erro ao carregar relatórios.</p>";
   }
 }
 
 //ranking
 async function carregarRanking() {
   document.getElementById('content').innerHTML = `
-    <div class="max-w-3xl mx-auto bg-white rounded-xl shadow p-8">
-      <h2 class="text-2xl font-bold mb-6 text-blue-800 flex items-center gap-2">
-        <svg class="w-7 h-7 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-width="1.5" d="M12 17.5l-5.09 2.68 1-5.82-4.22-4.11 5.84-.85L12 4.5l2.47 5.01 5.84.85-4.22 4.11 1 5.82z"></path>
-        </svg>
-        Ranking de Engajamento
-      </h2>
-      <div id="lista-ranking"></div>
+    <div class="bg-gray-100 min-h-screen p-6">
+      <!-- Cabeçalho -->
+      <header class="flex justify-between items-center bg-gradient-to-r from-yellow-500 to-yellow-700 text-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 17.5l-5.09 2.68 1-5.82-4.22-4.11 5.84-.85L12 4.5l2.47 5.01 5.84.85-4.22 4.11 1 5.82z"></path>
+          </svg>
+          Ranking de Engajamento
+        </h1>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Veja os melhores desempenhos!</span>
+        </div>
+      </header>
+
+      <div class="mt-8 space-y-6">
+        <!-- Tabela de Ranking -->
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Top Participantes</h2>
+          <div id="lista-ranking" class="overflow-x-auto"></div>
+        </section>
+      </div>
     </div>
   `;
+
   const resp = await fetch('/api/ranking');
   const ranking = await resp.json();
   const lista = document.getElementById('lista-ranking');
+
   if (ranking.length === 0) {
     lista.innerHTML = `<p class="text-gray-500 text-center">Nenhum dado de engajamento ainda.</p>`;
     return;
   }
+
   lista.innerHTML = `
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm bg-white rounded-xl overflow-hidden shadow">
-        <thead>
-          <tr class="bg-blue-50">
-            <th class="px-4 py-2 text-left">Posição</th>
-            <th class="px-4 py-2 text-left">Nome</th>
-            <th class="px-4 py-2 text-left">Presenças</th>
-            <th class="px-4 py-2 text-left">Tarefas Concluídas</th>
-            <th class="px-4 py-2 text-left">Pontos</th>
+    <table class="min-w-full text-sm bg-white rounded-xl overflow-hidden shadow">
+      <thead>
+        <tr class="bg-yellow-100">
+          <th class="px-4 py-2 text-left font-semibold text-gray-700">Posição</th>
+          <th class="px-4 py-2 text-left font-semibold text-gray-700">Nome</th>
+          <th class="px-4 py-2 text-left font-semibold text-gray-700">Presenças</th>
+          <th class="px-4 py-2 text-left font-semibold text-gray-700">Tarefas Concluídas</th>
+          <th class="px-4 py-2 text-left font-semibold text-gray-700">Pontos</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${ranking.map((u, i) => `
+          <tr class="${i === 0 ? 'bg-yellow-50 font-bold' : ''}">
+            <td class="border-t px-4 py-2">${i + 1} ${i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''}</td>
+            <td class="border-t px-4 py-2">${u.name}</td>
+            <td class="border-t px-4 py-2">${u.presencas}</td>
+            <td class="border-t px-4 py-2">${u.tarefas_concluidas}</td>
+            <td class="border-t px-4 py-2 text-yellow-600">${u.pontos}</td>
           </tr>
-        </thead>
-        <tbody>
-          ${ranking.map((u, i) => `
-            <tr class="${i === 0 ? 'bg-yellow-50 font-bold' : ''}">
-              <td class="border-t px-4 py-2">${i + 1} ${i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''}</td>
-              <td class="border-t px-4 py-2">${u.name}</td>
-              <td class="border-t px-4 py-2">${u.presencas}</td>
-              <td class="border-t px-4 py-2">${u.tarefas_concluidas}</td>
-              <td class="border-t px-4 py-2 text-blue-800">${u.pontos}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
+        `).join('')}
+      </tbody>
+    </table>
   `;
 }
 
