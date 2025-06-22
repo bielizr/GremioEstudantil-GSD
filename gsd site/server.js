@@ -201,6 +201,37 @@ db.run(`
     )
 `);
 
+// Tabela de Áudios da Rádio
+db.run(`
+  CREATE TABLE IF NOT EXISTS audios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome_original TEXT,
+    nome_armazenado TEXT,
+    tipo TEXT,
+    descricao TEXT,
+    data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// Tabela de Comunicados da Rádio
+db.run(`
+  CREATE TABLE IF NOT EXISTS comunicados (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mensagem TEXT NOT NULL,
+    data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS eventos_radio (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo TEXT NOT NULL,
+    inicio TEXT NOT NULL,
+    fim TEXT,
+    descricao TEXT
+  )
+`);
+
 
 
     // Relatórios de exemplo
@@ -259,6 +290,27 @@ db.run(`
     stmt.finalize();
 });
 
+// Criar evento da rádio
+app.post('/api/eventos_radio', (req, res) => {
+  const { titulo, inicio, fim, descricao } = req.body;
+  db.run(
+    `INSERT INTO eventos_radio (titulo, inicio, fim, descricao) VALUES (?, ?, ?, ?)`,
+    [titulo, inicio, fim, descricao],
+    function (err) {
+      if (err) return res.status(500).json({ error: 'Erro ao salvar evento.' });
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+// Listar eventos da rádio
+app.get('/api/eventos_radio', (req, res) => {
+  db.all(`SELECT * FROM eventos_radio`, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Erro ao buscar eventos.' });
+    res.json(rows);
+  });
+});
+
 // Rota para salvar uma reunião
 app.post('/api/reunioes', (req, res) => {
     const { nome, descricao, presencas } = req.body;
@@ -293,6 +345,68 @@ app.post('/api/reunioes', (req, res) => {
 
         res.status(201).json({ message: 'Reunião salva com sucesso!' });
     });
+});
+
+const multer = require('multer');
+const uploadAudios = multer({ dest: 'uploads/audios/' });
+
+// Upload de áudio
+app.post('/api/audios', uploadAudios.single('audio'), (req, res) => {
+  const { originalname, filename } = req.file;
+  const { tipo, descricao } = req.body;
+  db.run(
+    `INSERT INTO audios (nome_original, nome_armazenado, tipo, descricao) VALUES (?, ?, ?, ?)`,
+    [originalname, filename, tipo, descricao],
+    function (err) {
+      if (err) {
+        console.error('Erro ao salvar áudio:', err);
+        return res.status(500).json({ error: 'Erro ao salvar áudio.' });
+      }
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+// Listar áudios
+app.get('/api/audios', (req, res) => {
+  db.all(`SELECT * FROM audios ORDER BY data_upload DESC`, [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar áudios:', err);
+      return res.status(500).json({ error: 'Erro ao buscar áudios.' });
+    }
+    res.json(rows);
+  });
+});
+
+// Servir arquivos de áudio
+app.use('/uploads/audios', express.static(path.join(__dirname, 'uploads', 'audios')));
+
+// Criar comunicado
+app.post('/api/comunicados', (req, res) => {
+  const { mensagem } = req.body;
+  if (!mensagem) return res.status(400).json({ error: 'Mensagem obrigatória.' });
+  db.run(
+    `INSERT INTO comunicados (mensagem) VALUES (?)`,
+    [mensagem],
+    function (err) {
+      if (err) {
+        console.error('Erro ao salvar comunicado:', err);
+        return res.status(500).json({ error: 'Erro ao salvar comunicado.' });
+      }
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+// Listar comunicados
+app.get('/api/comunicados', (req, res) => {
+  db.all(`SELECT * FROM comunicados ORDER BY data_envio DESC`, [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar comunicados:', err);
+      return res.status(500).json({ error: 'Erro ao buscar comunicados.' });
+    }
+    res.json(rows);
+  });
 });
 
 // Rota para listar todas as reuniões

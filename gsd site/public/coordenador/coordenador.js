@@ -5,9 +5,6 @@
 function inicializarMenuCoordenador(setor) {
   if (!setor) setor = "Outro"; // Valor padrão para evitar erro
 
-  document.getElementById('coordenador-setor').textContent = `Coordenador - ${setor}`;
-  document.getElementById('coordenador-avatar').textContent = setor.substring(0, 2).toUpperCase();
-
   const menu = [
     {
       nome: "Início",
@@ -555,17 +552,226 @@ async function carregarCantina() {
   }
 }
 
+// ...existing code...
+
+// Função para carregar as comissões do coordenador
+async function carregarComissoes() {
+  const container = document.getElementById('content');
+  container.innerHTML = `
+    <div class="bg-gray-100 min-h-screen p-6">
+      <header class="flex justify-between items-center bg-gradient-to-r from-purple-600 to-purple-800 text-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-4-4h-1m-6 6v-2a4 4 0 014-4h1m-6 6H2v-2a4 4 0 014-4h1m6-6a4 4 0 11-8 0 4 4 0 018 0zm6 4a4 4 0 11-8 0 4 4 0 018 0z"></path>
+          </svg>
+          Minhas Comissões
+        </h1>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Veja as comissões que você participa!</span>
+        </div>
+      </header>
+      <div class="mt-8 space-y-6">
+        <section class="bg-white p-6 rounded-lg shadow-lg">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-800">Comissões</h2>
+          <div id="lista-comissoes" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch('http://localhost:3000/api/comissoes');
+    const comissoes = await res.json();
+    const userEmail = localStorage.getItem('userEmail');
+
+    // Filtra as comissões em que o coordenador participa
+    const minhasComissoes = comissoes.filter(comissao =>
+      comissao.membros && comissao.membros.includes(userEmail)
+    );
+
+    const lista = minhasComissoes.map(comissao => `
+      <div class="bg-gray-50 border rounded-lg p-4 shadow hover:shadow-lg transition">
+        <h3 class="font-semibold text-purple-800">${comissao.nome}</h3>
+        <p class="text-gray-600 text-sm">${comissao.descricao || ''}</p>
+      </div>
+    `).join('');
+
+    document.getElementById('lista-comissoes').innerHTML = lista || "<p class='text-gray-500'>Você não participa de nenhuma comissão.</p>";
+  } catch (err) {
+    document.getElementById('lista-comissoes').innerHTML = "<p class='text-red-600'>Erro ao carregar comissões.</p>";
+  }
+}
+
+// inicio 
+// ...existing code...
+
+async function carregarInicioCoordenador() {
+  const container = document.getElementById('content');
+  container.innerHTML = `<div class="text-center text-gray-500">Carregando...</div>`;
+
+  // Busca dados em paralelo
+  const [tarefasResp, rankingResp, eventosResp, comissoesResp] = await Promise.all([
+    fetch('http://localhost:3000/api/tarefas'),
+    fetch('/api/ranking'),
+    fetch('/api/eventos'),
+    fetch('http://localhost:3000/api/comissoes')
+  ]);
+  const tarefas = await tarefasResp.json();
+  const ranking = await rankingResp.json();
+  const eventos = await eventosResp.json();
+  const comissoes = await comissoesResp.json();
+
+  // Dados do usuário logado
+  const userId = localStorage.getItem('userId');
+  const userEmail = localStorage.getItem('userEmail');
+  const usuarioRanking = ranking.find(u => u.email === userEmail) || {};
+  const minhasComissoes = comissoes.filter(c => c.membros && c.membros.includes(userEmail));
+  const minhasTarefasPendentes = tarefas.filter(t => t.status !== 'Concluída' && t.destinatario_id == userId);
+
+  // Próximo evento do mês
+  const agora = new Date();
+  const eventosDoMes = eventos.filter(e => new Date(e.inicio).getMonth() === agora.getMonth());
+  const proximoEvento = eventosDoMes.sort((a, b) => new Date(a.inicio) - new Date(b.inicio))[0];
+
+  // Cards do topo
+  container.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div class="bg-white rounded-xl shadow p-6 flex flex-col items-center">
+        <span class="text-blue-600 text-3xl font-bold">${minhasTarefasPendentes.length}</span>
+        <span class="text-gray-700 mt-2 font-semibold">Tarefas Pendentes</span>
+        <span class="text-xs text-gray-500 mt-1">${tarefas.length > 0 ? Math.round(100 * (tarefas.length - minhasTarefasPendentes.length) / tarefas.length) : 0}% concluído</span>
+      </div>
+      <div class="bg-white rounded-xl shadow p-6 flex flex-col items-center">
+        <span class="text-green-600 text-3xl font-bold">${eventosDoMes.length}</span>
+        <span class="text-gray-700 mt-2 font-semibold">Eventos do Mês</span>
+        <span class="text-xs text-gray-500 mt-1">${proximoEvento ? `Próximo: ${proximoEvento.titulo} (${new Date(proximoEvento.inicio).toLocaleDateString()})` : 'Nenhum evento'}</span>
+      </div>
+      <div class="bg-white rounded-xl shadow p-6 flex flex-col items-center">
+        <span class="text-purple-600 text-3xl font-bold">${minhasComissoes.length}</span>
+        <span class="text-gray-700 mt-2 font-semibold">Comissões Ativas</span>
+        <span class="text-xs text-gray-500 mt-1">Membros envolvidos: ${minhasComissoes.reduce((acc, c) => acc + (c.membros?.length || 0), 0)}</span>
+      </div>
+      <div class="bg-white rounded-xl shadow p-6 flex flex-col items-center">
+        <span class="text-yellow-500 text-3xl font-bold">${usuarioRanking.posicao || '-'}</span>
+        <span class="text-gray-700 mt-2 font-semibold">Seu Ranking</span>
+        <span class="text-xs text-gray-500 mt-1">Pontos: ${usuarioRanking.pontos || 0}</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div>
+        <h3 class="text-lg font-bold mb-4 text-blue-800">Tarefas Recentes</h3>
+        <div class="space-y-3">
+          ${minhasTarefasPendentes.slice(0, 5).map(t => `
+            <div class="bg-gray-50 rounded-lg p-4 shadow flex items-center justify-between">
+              <div>
+                <div class="font-semibold text-gray-800">${t.titulo}</div>
+                <div class="text-xs text-gray-500">Vence em ${t.data_limite ? Math.ceil((new Date(t.data_limite) - agora) / (1000*60*60*24)) : '-'} dias</div>
+              </div>
+              <span class="text-xs px-2 py-1 rounded ${t.prioridade === 'Alta' ? 'bg-blue-100 text-blue-700' : t.prioridade === 'Média' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-200 text-gray-700'}">${t.prioridade || 'Pendente'}</span>
+            </div>
+          `).join('') || `<div class="text-gray-500">Nenhuma tarefa recente.</div>`}
+        </div>
+      </div>
+      <div>
+        <h3 class="text-lg font-bold mb-4 text-blue-800">Calendário de Eventos</h3>
+        <div id="calendar-coordenador"></div>
+      </div>
+    </div>
+  `;
+
+  // Renderiza o calendário igual ao do presidente
+  if (window.FullCalendar) {
+    const calendarEl = document.getElementById('calendar-coordenador');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: 'dayGridMonth',
+      height: 500,
+      events: eventos.map(e => ({
+        id: e.id,
+        title: e.titulo,
+        start: e.inicio,
+        end: e.fim,
+        extendedProps: {
+          descricao: e.descricao,
+          tipo: e.tipo
+        }
+      }))
+    });
+    calendar.render();
+  }
+}
+
+// ...existing code...
+
+// PERFIL DO COORDENADOR (nome, foto, upload e logout)
+window.addEventListener('DOMContentLoaded', async () => {
+  const nome = localStorage.getItem('nome'); // Salve o nome no login!
+  const email = localStorage.getItem('userEmail');
+  if (document.getElementById('nome-coordenador')) {
+    document.getElementById('nome-coordenador').textContent = nome || 'Coordenador';
+  }
+
+  // Busca foto do backend
+  try {
+    const resp = await fetch(`http://localhost:3000/api/usuarios?email=${email}`);
+    const usuario = (await resp.json())[0];
+    if (usuario && usuario.foto_url && document.getElementById('avatar-coordenador')) {
+      document.getElementById('avatar-coordenador').src = usuario.foto_url;
+    }
+  } catch (e) {
+    // Se der erro, mantém o avatar padrão
+  }
+});
+
+// Upload da foto de perfil
+if (document.getElementById('input-foto-perfil')) {
+  document.getElementById('input-foto-perfil').addEventListener('change', async function () {
+    const file = this.files[0];
+    if (!file) return;
+    const email = localStorage.getItem('userEmail');
+    const formData = new FormData();
+    formData.append('foto', file);
+    formData.append('email', email);
+
+    // Envia para o backend
+    const resp = await fetch('http://localhost:3000/api/usuarios/foto', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await resp.json();
+    if (data.foto_url && document.getElementById('avatar-coordenador')) {
+      document.getElementById('avatar-coordenador').src = data.foto_url;
+      alert('Foto atualizada!');
+    } else {
+      alert('Erro ao atualizar foto.');
+    }
+  });
+}
+
+// Logout
+if (document.getElementById('logout-btn')) {
+  document.getElementById('logout-btn').addEventListener('click', function () {
+    localStorage.clear();
+    window.location.href = '/index_login.html'; // Ajuste o caminho se necessário
+  });
+}
+
+// ...existing code...
+
+
+
+
 // Adiciona eventos de clique para o menu
 document.addEventListener('click', function (e) {
   const target = e.target.closest('a');
   if (!target) return;
 
   const href = target.getAttribute('href');
-  if (href === '#arquivos') carregarArquivos();
+  if (href === '#inicio') carregarInicioCoordenador(); // <-- ADICIONE ESTA LINHA
+  else if (href === '#arquivos') carregarArquivos();
   else if (href === '#tarefas') carregarTarefas();
   else if (href === '#comissoes') carregarComissoes();
-  else if (href === '#relatorios') exibirFormularioRelatorio(); // Chama o formulário de envio
-  else if (href === '#relatoriosEnviados') carregarRelatoriosAtualizados(); // Carrega relatórios enviados
-  else if (href === '#ranking')  carregarRanking(); // Carrega ranking
-  else if (href === '#cantina') carregarCantina(); // Carrega a aba Cantina
+  else if (href === '#relatorios') exibirFormularioRelatorio();
+  else if (href === '#relatoriosEnviados') carregarRelatoriosAtualizados();
+  else if (href === '#ranking')  carregarRanking();
+  else if (href === '#cantina') carregarCantina();
 });

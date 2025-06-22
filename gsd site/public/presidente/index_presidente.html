@@ -13,7 +13,7 @@
 <body class="bg-gray-100">
   <div class="flex h-screen">
     <!-- Sidebar -->
-<aside class="w-72 bg-gradient-to-b from-blue-900 via-blue-800 to-blue-600 text-white flex flex-col">
+    <aside class="w-72 bg-gradient-to-b from-blue-900 via-blue-800 to-blue-600 text-white flex flex-col">
       <div class="flex items-center justify-center h-20 border-b border-blue-700">
         <img src="https://img.icons8.com/ios-filled/50/ffffff/graduation-cap.png" class="w-10 h-10 mr-2" alt="Logo" />
         <div>
@@ -124,10 +124,24 @@
             </svg>
             <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
           </button>
-          <div class="flex items-center gap-2">
-            <span class="font-semibold text-gray-700">Presidente</span>
-            <span
-              class="w-9 h-9 rounded-full bg-blue-200 flex items-center justify-center text-blue-800 font-bold">PR</span>
+          <div class="relative group" id="perfil-presidente" style="cursor:pointer;">
+            <button class="flex items-center gap-2 focus:outline-none">
+              <img id="avatar-presidente" src="https://ui-avatars.com/api/?name=PR&background=2563eb&color=fff"
+                alt="Avatar" class="w-10 h-10 rounded-full border-2 border-blue-600 object-cover">
+              <span id="nome-presidente" class="font-semibold text-gray-700"></span>
+              <svg class="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </button>
+            <div class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50 hidden group-hover:block"
+              id="dropdown-perfil-presidente">
+              <label class="block px-4 py-2 cursor-pointer hover:bg-gray-100">
+                <span>Alterar foto</span>
+                <input type="file" id="input-foto-perfil-presidente" accept="image/*" class="hidden">
+              </label>
+              <button id="logout-btn-presidente"
+                class="block w-full text-left px-4 py-2 text-red-600 hover:bg-gray-100">Sair</button>
+            </div>
           </div>
         </div>
       </header>

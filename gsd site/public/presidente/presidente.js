@@ -1394,3 +1394,60 @@ async function carregarRanking() {
 }
 // ...existing code...
 window.carregarRanking = carregarRanking; t
+
+// ...existing code...
+
+// PERFIL DO PRESIDENTE (nome, foto, upload e logout)
+window.addEventListener('DOMContentLoaded', async () => {
+  const nome = localStorage.getItem('nome'); // Salve o nome no login!
+  const email = localStorage.getItem('userEmail');
+  if (document.getElementById('nome-presidente')) {
+    document.getElementById('nome-presidente').textContent = nome || 'Presidente';
+  }
+
+  // Busca foto do backend
+  try {
+    const resp = await fetch(`http://localhost:3000/api/usuarios?email=${email}`);
+    const usuario = (await resp.json())[0];
+    if (usuario && usuario.foto_url && document.getElementById('avatar-presidente')) {
+      document.getElementById('avatar-presidente').src = usuario.foto_url;
+    }
+  } catch (e) {
+    // Se der erro, mantém o avatar padrão
+  }
+});
+
+// Upload da foto de perfil
+if (document.getElementById('input-foto-perfil-presidente')) {
+  document.getElementById('input-foto-perfil-presidente').addEventListener('change', async function () {
+    const file = this.files[0];
+    if (!file) return;
+    const email = localStorage.getItem('userEmail');
+    const formData = new FormData();
+    formData.append('foto', file);
+    formData.append('email', email);
+
+    // Envia para o backend
+    const resp = await fetch('http://localhost:3000/api/usuarios/foto', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await resp.json();
+    if (data.foto_url && document.getElementById('avatar-presidente')) {
+      document.getElementById('avatar-presidente').src = data.foto_url;
+      alert('Foto atualizada!');
+    } else {
+      alert('Erro ao atualizar foto.');
+    }
+  });
+}
+
+// Logout
+if (document.getElementById('logout-btn-presidente')) {
+  document.getElementById('logout-btn-presidente').addEventListener('click', function () {
+    localStorage.clear();
+    window.location.href = '/index_login.html'; // Ajuste o caminho se necessário
+  });
+}
+
+// ...existing code...
