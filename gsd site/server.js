@@ -11,7 +11,7 @@ const corsOptions = {
   origin: process.env.FRONTEND_URL || "http://localhost:3000", // Permitir requisições do frontend
   optionsSuccessStatus: 200,
 };
-app.use(cors(corsOptions));
+app.use(cors(corsOptions ));
 app.use(express.json());
 
 let pool; // Declarar pool fora do bloco condicional
@@ -220,6 +220,60 @@ async function initializeDatabase() {
       );
     `);
 
+    // Tabela de Produtos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS produtos (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        preco REAL NOT NULL,
+        quantidade INTEGER NOT NULL
+      );
+    `);
+
+    // Tabela de Vendas
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vendas (
+        id SERIAL PRIMARY KEY,
+        produtos TEXT NOT NULL,
+        total REAL NOT NULL,
+        valorRecebido REAL NOT NULL,
+        troco REAL NOT NULL,
+        data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Tabela de Áudios da Rádio
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS audios (
+        id SERIAL PRIMARY KEY,
+        nome_original TEXT,
+        nome_armazenado TEXT,
+        tipo TEXT,
+        descricao TEXT,
+        data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Tabela de Comunicados da Rádio
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS comunicados (
+        id SERIAL PRIMARY KEY,
+        mensagem TEXT NOT NULL,
+        data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Tabela de Eventos da Rádio
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS eventos_radio (
+        id SERIAL PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        inicio TEXT NOT NULL,
+        fim TEXT,
+        descricao TEXT
+      );
+    `);
+
     // Inserir dados de exemplo (se as tabelas estiverem vazias)
     const { rowCount: usersCount } = await client.query("SELECT COUNT(*) FROM users");
     if (usersCount === 0) {
@@ -293,6 +347,7 @@ async function initializeDatabase() {
 initializeDatabase();
 
 // Serve arquivos estáticos
+app.use(express.static(path.join(__dirname, "public"))); // Adicionado para servir a pasta public de forma geral
 app.use("/login", express.static(path.join(__dirname, "public", "login")));
 app.use("/presidente", express.static(path.join(__dirname, "public", "presidente")));
 app.use("/coordenador", express.static(path.join(__dirname, "public", "coordenador")));
@@ -1031,5 +1086,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-
-
