@@ -1,70 +1,96 @@
-const express = require('express');
-const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
-const cors = require('cors');
+const express = require("express");
+const path = require("path");
+const { Pool } = require("pg"); // Importa o Pool do pg
+const cors = require("cors");
 const app = express();
-const PORT = 3000;
-const fs = require('fs');
+const fs = require("fs");
+const multer = require("multer");
 
-app.use(cors()); // Para facilitar testes locais
+// Configuração do CORS
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || "http://localhost:3000", // Permitir requisições do frontend
+  optionsSuccessStatus: 200,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
-// Serve arquivos estáticos
-app.use('/login', express.static(path.join(__dirname, 'public', 'login')));
-app.use('/presidente', express.static(path.join(__dirname, 'public', 'presidente')));
-app.use('/coordenador', express.static(path.join(__dirname, 'public', 'coordenador')));
-app.use('/membro', express.static(path.join(__dirname, 'public', 'membro')));
+let pool; // Declarar pool fora do bloco condicional
 
-// Redireciona para login
-app.get('/', (req, res) => {
-    res.redirect('/login/index_login.html');
-});
+// Configuração do Pool de Conexões PostgreSQL (apenas se DATABASE_URL estiver definida)
+if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL, // DATABASE_URL será fornecida pela Railway
+    ssl: {
+      rejectUnauthorized: false, // Necessário para conexões SSL com alguns provedores
+    },
+  });
 
-// Banco SQLite
-const db = new sqlite3.Database(':memory:');
+  // Testar a conexão com o PostgreSQL
+  pool.connect((err, client, release) => {
+    if (err) {
+      console.error("Erro ao adquirir cliente do pool (teste de conexão):", err.stack);
+      return;
+    }
+    client.query("SELECT NOW()", (err, result) => {
+      release();
+      if (err) {
+        console.error("Erro ao executar query de teste:", err.stack);
+        return;
+      }
+      console.log("Conectado ao PostgreSQL! Hora atual do DB:", result.rows[0].now);
+    });
+  });
+} else {
+  console.log("Variável de ambiente DATABASE_URL não definida. O backend não se conectará a um banco de dados PostgreSQL localmente.");
+}
 
-// Criando tabelas no banco de dados
-db.serialize(() => {
+// Função para inicializar o banco de dados com tabelas e dados iniciais
+async function initializeDatabase() {
+  if (!pool) {
+    console.log("DATABASE_URL não definida. Pulando inicialização do banco de dados.");
+    return;
+  }
+  let client = null; // Declarar client fora do bloco try
+  try {
+    client = await pool.connect();
+    console.log("Iniciando inicialização do banco de dados...");
+
     // Tabela de Reuniões
-    db.run(`
-        CREATE TABLE IF NOT EXISTS reunioes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            descricao TEXT NOT NULL,
-            data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reunioes (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        descricao TEXT NOT NULL,
+        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     // Tabela de Presenças
-    db.run(`
-        CREATE TABLE IF NOT EXISTS presencas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            reuniao_id INTEGER NOT NULL,
-            usuario_id INTEGER NOT NULL,
-            status TEXT NOT NULL, -- 'presente' ou 'ausente'
-            FOREIGN KEY (reuniao_id) REFERENCES reunioes (id)
-        )
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS presencas (
+        id SERIAL PRIMARY KEY,
+        reuniao_id INTEGER NOT NULL REFERENCES reunioes(id) ON DELETE CASCADE,
+        usuario_id INTEGER NOT NULL,
+        status TEXT NOT NULL
+      );
     `);
 
     // Tabela de Usuários
-    db.run(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            role TEXT NOT NULL,
-            sector TEXT NOT NULL,
-            password TEXT NOT NULL
-        )
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL,
+        sector TEXT NOT NULL,
+        password TEXT NOT NULL
+      );
     `);
 
-
-    // ...outras criações de tabela...
-
-    // Tabela de Relatórios (apenas UMA VEZ!)
-    db.run(`
-    CREATE TABLE IF NOT EXISTS relatorios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    // Tabela de Relatórios
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS relatorios (
+        id SERIAL PRIMARY KEY,
         tipo TEXT NOT NULL,
         projeto TEXT NOT NULL,
         coordenador TEXT NOT NULL,
@@ -73,959 +99,937 @@ db.serialize(() => {
         conteudo TEXT,
         observacao TEXT,
         usuario_email TEXT
-    )
-`);
+      );
+    `);
 
     // Tabela de Comissões
-    db.run(`
-  CREATE TABLE IF NOT EXISTS comissoes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT NOT NULL,
-    tipo TEXT NOT NULL, -- 'Fixa' ou 'Temporária'
-    coordenador_id INTEGER, -- pode ser null se for um novo coordenador
-    coordenador_nome TEXT,  -- nome do coordenador (caso não seja usuário fixo)
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS comissoes (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        coordenador_id INTEGER,
+        coordenador_nome TEXT,
+        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // Tabela de Membros da Comissão
-    db.run(`
-  CREATE TABLE IF NOT EXISTS membros_comissao (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    comissao_id INTEGER NOT NULL,
-    usuario_id INTEGER,         -- se for usuário fixo
-    nome TEXT NOT NULL,         -- nome do membro (sempre preenchido)
-    email TEXT,                 -- email do membro (opcional)
-    funcao TEXT,                -- função na comissão (opcional)
-    FOREIGN KEY (comissao_id) REFERENCES comissoes(id)
-  )
-`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS membros_comissao (
+        id SERIAL PRIMARY KEY,
+        comissao_id INTEGER NOT NULL REFERENCES comissoes(id) ON DELETE CASCADE,
+        usuario_id INTEGER,
+        nome TEXT NOT NULL,
+        email TEXT,
+        funcao TEXT
+      );
+    `);
 
-    //tabela tarefas
-    db.run(`
-  CREATE TABLE IF NOT EXISTS tarefas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    titulo TEXT NOT NULL,
-    descricao TEXT,
-    data_limite TEXT,
-    status TEXT DEFAULT 'Pendente',
-    tipo_destinatario TEXT, -- 'usuario' ou 'comissao'
-    destinatario_id INTEGER, -- id do usuário ou da comissão
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+    // Tabela de Tarefas
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tarefas (
+        id SERIAL PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        descricao TEXT,
+        data_limite TEXT,
+        status TEXT DEFAULT 'Pendente',
+        tipo_destinatario TEXT,
+        destinatario_id INTEGER,
+        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-    const multer = require('multer');
-    const upload = multer({ dest: 'uploads/' }); // pasta onde os arquivos ficarão
+    // Tabela de Arquivos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS arquivos (
+        id SERIAL PRIMARY KEY,
+        nome_original TEXT,
+        nome_armazenado TEXT,
+        tipo TEXT,
+        categoria TEXT,
+        data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-    // Tabela para registrar arquivos
-    db.run(`
-  CREATE TABLE IF NOT EXISTS arquivos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome_original TEXT,
-    nome_armazenado TEXT,
-    tipo TEXT,
-    categoria TEXT,
-    data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+    // Tabela de Eventos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS eventos (
+        id SERIAL PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        descricao TEXT,
+        inicio TEXT NOT NULL,
+        fim TEXT,
+        tipo TEXT,
+        criado_por TEXT,
+        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-    // Upload de arquivo
-    app.post('/api/arquivos', upload.single('arquivo'), (req, res) => {
-        const { originalname, filename, mimetype } = req.file;
-        const { categoria } = req.body;
-        db.run(
-            `INSERT INTO arquivos (nome_original, nome_armazenado, tipo, categoria) VALUES (?, ?, ?, ?)`,
-            [originalname, filename, mimetype, categoria],
-            function (err) {
-                if (err) {
-                    console.error('Erro ao salvar arquivo:', err);
-                    return res.status(500).json({ error: 'Erro ao salvar arquivo.' });
-                }
-                res.json({ id: this.lastID });
-            }
-        );
-    });
-
-    // Listar arquivos
-    app.get('/api/arquivos', (req, res) => {
-        db.all(`SELECT * FROM arquivos ORDER BY data_upload DESC`, [], (err, rows) => {
-            if (err) {
-                console.error('Erro ao buscar arquivos:', err);
-                return res.status(500).json({ error: 'Erro ao buscar arquivos.' });
-            }
-            res.json(rows);
-        });
-    });
-
-    // Download de arquivo
-    app.get('/uploads/:nome', (req, res) => {
-        const filePath = path.join(__dirname, 'uploads', req.params.nome);
-        res.sendFile(filePath);
-    });
-    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-    //tabela eventos
-    db.run(`
-  CREATE TABLE IF NOT EXISTS eventos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    titulo TEXT NOT NULL,
-    descricao TEXT,
-    inicio TEXT NOT NULL,
-    fim TEXT,
-    tipo TEXT, -- Ex: Reunião, Evento, Outro
-    criado_por TEXT,
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
-
-// Tabela de Produtos
-db.run(`
-    CREATE TABLE IF NOT EXISTS produtos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    // Tabela de Produtos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS produtos (
+        id SERIAL PRIMARY KEY,
         nome TEXT NOT NULL,
         preco REAL NOT NULL,
         quantidade INTEGER NOT NULL
-    )
-`);
+      );
+    `);
 
-// Tabela de Vendas
-db.run(`
-    CREATE TABLE IF NOT EXISTS vendas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    // Tabela de Vendas
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vendas (
+        id SERIAL PRIMARY KEY,
         produtos TEXT NOT NULL,
         total REAL NOT NULL,
         valorRecebido REAL NOT NULL,
         troco REAL NOT NULL,
         data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-`);
+      );
+    `);
 
-// Tabela de Áudios da Rádio
-db.run(`
-  CREATE TABLE IF NOT EXISTS audios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome_original TEXT,
-    nome_armazenado TEXT,
-    tipo TEXT,
-    descricao TEXT,
-    data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+    // Tabela de Áudios da Rádio
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS audios (
+        id SERIAL PRIMARY KEY,
+        nome_original TEXT,
+        nome_armazenado TEXT,
+        tipo TEXT,
+        descricao TEXT,
+        data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-// Tabela de Comunicados da Rádio
-db.run(`
-  CREATE TABLE IF NOT EXISTS comunicados (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    mensagem TEXT NOT NULL,
-    data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+    // Tabela de Comunicados da Rádio
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS comunicados (
+        id SERIAL PRIMARY KEY,
+        mensagem TEXT NOT NULL,
+        data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS eventos_radio (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    titulo TEXT NOT NULL,
-    inicio TEXT NOT NULL,
-    fim TEXT,
-    descricao TEXT
-  )
-`);
+    // Tabela de Eventos da Rádio
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS eventos_radio (
+        id SERIAL PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        inicio TEXT NOT NULL,
+        fim TEXT,
+        descricao TEXT
+      );
+    `);
 
+    // Inserir dados de exemplo (se as tabelas estiverem vazias)
+    const { rowCount: usersCount } = await client.query("SELECT COUNT(*) FROM users");
+    if (usersCount === 0) {
+      const users = [
+        { name: 'Gabriel Callegari', email: 'gabrielcallegari@gsd.com', role: 'presidente', sector: 'Diretoria Geral', password: '@Gsd2025' },
+        { name: 'Maxine', email: 'maxine@gsd.com', role: 'vice-presidente', sector: 'Diretoria Geral', password: '@Gsd2025' },
+        { name: 'Maria Eduarda', email: 'mariaeduarda@gsd.com', role: 'coordenador', sector: 'Finanças', password: '@Gsd2025' },
+        { name: 'Arthur', email: 'arthur@gsd.com', role: 'membro', sector: 'Rádio GSD Mix', password: '@Gsd2025' },
+        { name: 'Mavi', email: 'mavi@gsd.com', role: 'coordenador', sector: 'Eventos', password: '@Gsd2025' },
+        { name: 'Estephani', email: 'estephani@gsd.com', role: 'coordenador', sector: 'Eventos', password: '@Gsd2025' },
+        { name: 'Ana Julia', email: 'anajulia@gsd.com', role: 'coordenador', sector: 'Esportes', password: '@Gsd2025' },
+        { name: 'Yasmin', email: 'yasmin@gsd.com', role: 'coordenador', sector: 'Esportes', password: '@Gsd2025' },
+        { name: 'Suyane', email: 'suyane@gsd.com', role: 'coordenador', sector: 'Relações Sociais', password: '@Gsd2025' },
+        { name: 'Heloisa', email: 'heloisa@gsd.com', role: 'coordenador', sector: 'Relações Sociais', password: '@Gsd2025' },
+        { name: 'Vitoria', email: 'vitoria@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: '@Gsd2025' },
+        { name: 'Yan', email: 'yan@gsd.com', role: 'membro', sector: 'Rádio GSD Mix', password: '@Gsd2025' },
+        { name: 'Wesley', email: 'wesley@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: '@Gsd2025' },
+        { name: 'Davi', email: 'davi@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: '@Gsd2025' },
+        { name: 'Lorrany', email: 'lorrany@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: '@Gsd2025' },
+        { name: 'Isabela', email: 'isabela@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: '@Gsd2025' }
+      ];
+      for (const user of users) {
+        await client.query(
+          "INSERT INTO users (name, email, role, sector, password) VALUES ($1, $2, $3, $4, $5)",
+          [user.name, user.email, user.role, user.sector, user.password]
+        );
+      }
+      console.log("Usuários de exemplo inseridos.");
+    }
 
-
-    // Relatórios de exemplo
-    const relatoriosExemplo = [
+    const { rowCount: relatoriosCount } = await client.query("SELECT COUNT(*) FROM relatorios");
+    if (relatoriosCount === 0) {
+      const relatoriosExemplo = [
         {
-            tipo: "Criação de Projeto",
-            projeto: "Feira de Ciências",
-            coordenador: "João Silva",
-            status: "Pendente",
-            conteudo: "Descrição detalhada da Feira de Ciências.",
-            observacao: "",
-            usuario_email: "joao@gsd.com"
+          tipo: "Criação de Projeto",
+          projeto: "Feira de Ciências",
+          coordenador: "João Silva",
+          status: "Pendente",
+          conteudo: "Descrição detalhada da Feira de Ciências.",
+          observacao: "",
+          usuario_email: "joao@gsd.com",
         },
         {
-            tipo: "Relatório de Andamento",
-            projeto: "Gincana Escolar",
-            coordenador: "Maria Eduarda",
-            status: "Aprovado",
-            conteudo: "A gincana está em andamento, tudo conforme o planejado.",
-            observacao: "",
-            usuario_email: "mariaeduarda@gsd.com"
-        }
-    ];
-    const stmtRel = db.prepare("INSERT INTO relatorios (tipo, projeto, coordenador, status, conteudo, observacao, usuario_email) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    relatoriosExemplo.forEach(r => {
-        stmtRel.run(r.tipo, r.projeto, r.coordenador, r.status, r.conteudo, r.observacao, r.usuario_email);
-    });
-    stmtRel.finalize();
-
-
-
-    // Definição dos usuários fixos
-    const users = [
-        { name: 'Gabriel Callegari', email: 'gabrielcallegari@gsd.com', role: 'presidente', sector: 'Diretoria Geral', password: 'senha123' },
-        { name: 'Maxine', email: 'maxine@gsd.com', role: 'vice-presidente', sector: 'Diretoria Geral', password: 'senha123' },
-        { name: 'Maria Eduarda', email: 'mariaeduarda@gsd.com', role: 'coordenador', sector: 'Finanças', password: 'senha123' },
-        { name: 'Arthur', email: 'arthur@gsd.com', role: 'coordenador', sector: 'Finanças', password: 'senha123' },
-        { name: 'Mavi', email: 'mavi@gsd.com', role: 'coordenador', sector: 'Eventos', password: 'senha123' },
-        { name: 'Estephani', email: 'estephani@gsd.com', role: 'coordenador', sector: 'Eventos', password: 'senha123' },
-        { name: 'Isaque', email: 'isaque@gsd.com', role: 'coordenador', sector: 'Esportes', password: 'senha123' },
-        { name: 'Muralha', email: 'muralha@gsd.com', role: 'coordenador', sector: 'Esportes', password: 'senha123' },
-        { name: 'Suyane', email: 'suyane@gsd.com', role: 'coordenador', sector: 'Relações Sociais', password: 'senha123' },
-        { name: 'Heloisa', email: 'heloisa@gsd.com', role: 'coordenador', sector: 'Relações Sociais', password: 'senha123' },
-        { name: 'Vitoria', email: 'vitoria@gsd.com', role: 'membro', sector: 'Rádio GSD Mix', password: 'senha123' },
-        { name: 'Yan', email: 'yan@gsd.com', role: 'membro', sector: 'Rádio GSD Mix', password: 'senha123' },
-        { name: 'Wesley', email: 'wesley@gsd.com', role: 'membro', sector: 'Rádio GSD Mix', password: 'senha123' },
-        { name: 'Davi', email: 'davi@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: 'senha123' },
-        { name: 'Lorrany', email: 'lorrany@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: 'senha123' },
-        { name: 'Isabela', email: 'isabela@gsd.com', role: 'membro', sector: 'Direitos Humanos', password: 'senha123' }
-    ];
-
-    const stmt = db.prepare("INSERT INTO users (name, email, role, sector, password) VALUES (?, ?, ?, ?, ?)");
-    users.forEach(user => {
-        stmt.run(user.name, user.email, user.role, user.sector, user.password);
-    });
-    stmt.finalize();
-});
-
-// Criar evento da rádio
-app.post('/api/eventos_radio', (req, res) => {
-  const { titulo, inicio, fim, descricao } = req.body;
-  db.run(
-    `INSERT INTO eventos_radio (titulo, inicio, fim, descricao) VALUES (?, ?, ?, ?)`,
-    [titulo, inicio, fim, descricao],
-    function (err) {
-      if (err) return res.status(500).json({ error: 'Erro ao salvar evento.' });
-      res.json({ id: this.lastID });
+          tipo: "Relatório de Andamento",
+          projeto: "Gincana Escolar",
+          coordenador: "Maria Eduarda",
+          status: "Aprovado",
+          conteudo: "A gincana está em andamento, tudo conforme o planejado.",
+          observacao: "",
+          usuario_email: "mariaeduarda@gsd.com",
+        },
+      ];
+      for (const r of relatoriosExemplo) {
+        await client.query(
+          "INSERT INTO relatorios (tipo, projeto, coordenador, status, conteudo, observacao, usuario_email) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [r.tipo, r.projeto, r.coordenador, r.status, r.conteudo, r.observacao, r.usuario_email]
+        );
+      }
+      console.log("Relatórios de exemplo inseridos.");
     }
-  );
+
+    console.log("Banco de dados inicializado com sucesso!");
+  } catch (error) {
+    console.error("Erro na inicialização do banco de dados:", error);
+  } finally {
+    if (client) client.release();
+  }
+}
+
+// Chamar a função de inicialização do banco de dados ao iniciar o servidor
+initializeDatabase();
+
+// Serve arquivos estáticos
+app.use("/login", express.static(path.join(__dirname, "public", "login")));
+app.use("/presidente", express.static(path.join(__dirname, "public", "presidente")));
+app.use("/coordenador", express.static(path.join(__dirname, "public", "coordenador")));
+app.use("/membro", express.static(path.join(__dirname, "public", "membro")));
+
+// Redireciona para login
+app.get("/", (req, res) => {
+  res.redirect("/login/index_login.html");
 });
 
-// Listar eventos da rádio
-app.get('/api/eventos_radio', (req, res) => {
-  db.all(`SELECT * FROM eventos_radio`, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Erro ao buscar eventos.' });
+// Rotas de API
+
+// Rota de Login
+app.post("/api/login", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { email, password } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM users WHERE email = $1 AND password = $2",
+      [email, password]
+    );
+    if (rows.length > 0) {
+      const user = rows[0];
+      res.json({ success: true, role: user.role, name: user.name, email: user.email, sector: user.sector });
+    } else {
+      res.status(401).json({ success: false, message: "Credenciais inválidas." });
+    }
+  } catch (err) {
+    console.error("Erro no login:", err);
+    res.status(500).json({ error: "Erro interno do servidor." });
+  }
+});
+
+// Rota para obter todos os usuários
+app.get("/api/users", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT id, name, email, role, sector FROM users");
     res.json(rows);
-  });
+  } catch (err) {
+    console.error("Erro ao buscar usuários:", err);
+    res.status(500).json({ error: "Erro interno do servidor." });
+  }
 });
 
 // Rota para salvar uma reunião
-app.post('/api/reunioes', (req, res) => {
-    const { nome, descricao, presencas } = req.body;
+app.post("/api/reunioes", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { nome, descricao, presencas } = req.body;
 
-    console.log('Dados recebidos:', { nome, descricao, presencas });
+  console.log("Dados recebidos para reunião:", { nome, descricao, presencas });
 
-    if (!nome || !descricao || !presencas) {
-        return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
+  if (!nome || !descricao || !presencas) {
+    return res.status(400).json({ error: "Todos os campos são obrigatórios." });
+  }
+  try {
+    const resultReuniao = await pool.query(
+      "INSERT INTO reunioes (nome, descricao) VALUES ($1, $2) RETURNING id",
+      [nome, descricao]
+    );
+    const reuniaoId = resultReuniao.rows[0].id;
+
+    for (const usuario of presencas) {
+      await pool.query(
+        "INSERT INTO presencas (reuniao_id, usuario_id, status) VALUES ($1, $2, $3)",
+        [reuniaoId, usuario.id, usuario.status]
+      );
     }
 
-    const query = `INSERT INTO reunioes (nome, descricao) VALUES (?, ?)`;
-    db.run(query, [nome, descricao], function (err) {
-        if (err) {
-            console.error('Erro ao salvar reunião:', err);
-            return res.status(500).json({ error: 'Erro ao salvar a reunião.' });
-        }
-
-        const reuniaoId = this.lastID;
-
-        const presencaQuery = `INSERT INTO presencas (reuniao_id, usuario_id, status) VALUES (?, ?, ?)`;
-        const stmt = db.prepare(presencaQuery);
-
-        presencas.forEach(usuario => {
-            stmt.run(reuniaoId, usuario.id, usuario.status, (err) => {
-                if (err) {
-                    console.error('Erro ao salvar presença:', err);
-                }
-            });
-        });
-
-        stmt.finalize();
-
-        res.status(201).json({ message: 'Reunião salva com sucesso!' });
-    });
-});
-
-const multer = require('multer');
-const uploadAudios = multer({ dest: 'uploads/audios/' });
-
-// Upload de áudio
-app.post('/api/audios', uploadAudios.single('audio'), (req, res) => {
-  const { originalname, filename } = req.file;
-  const { tipo, descricao } = req.body;
-  db.run(
-    `INSERT INTO audios (nome_original, nome_armazenado, tipo, descricao) VALUES (?, ?, ?, ?)`,
-    [originalname, filename, tipo, descricao],
-    function (err) {
-      if (err) {
-        console.error('Erro ao salvar áudio:', err);
-        return res.status(500).json({ error: 'Erro ao salvar áudio.' });
-      }
-      res.json({ id: this.lastID });
-    }
-  );
-});
-
-// Listar áudios
-app.get('/api/audios', (req, res) => {
-  db.all(`SELECT * FROM audios ORDER BY data_upload DESC`, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar áudios:', err);
-      return res.status(500).json({ error: 'Erro ao buscar áudios.' });
-    }
-    res.json(rows);
-  });
-});
-
-// Servir arquivos de áudio
-app.use('/uploads/audios', express.static(path.join(__dirname, 'uploads', 'audios')));
-
-// Criar comunicado
-app.post('/api/comunicados', (req, res) => {
-  const { mensagem } = req.body;
-  if (!mensagem) return res.status(400).json({ error: 'Mensagem obrigatória.' });
-  db.run(
-    `INSERT INTO comunicados (mensagem) VALUES (?)`,
-    [mensagem],
-    function (err) {
-      if (err) {
-        console.error('Erro ao salvar comunicado:', err);
-        return res.status(500).json({ error: 'Erro ao salvar comunicado.' });
-      }
-      res.json({ id: this.lastID });
-    }
-  );
-});
-
-// Listar comunicados
-app.get('/api/comunicados', (req, res) => {
-  db.all(`SELECT * FROM comunicados ORDER BY data_envio DESC`, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar comunicados:', err);
-      return res.status(500).json({ error: 'Erro ao buscar comunicados.' });
-    }
-    res.json(rows);
-  });
+    res.status(201).json({ message: "Reunião salva com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao salvar reunião:", err);
+    res.status(500).json({ error: "Erro ao salvar a reunião." });
+  }
 });
 
 // Rota para listar todas as reuniões
-app.get('/api/reunioes', (req, res) => {
-    const queryReunioes = `
-        SELECT r.id, r.nome, r.descricao, r.data_criacao,
-               p.usuario_id, p.status, u.name AS usuario_nome
-        FROM reunioes r
-        LEFT JOIN presencas p ON r.id = p.reuniao_id
-        LEFT JOIN users u ON p.usuario_id = u.id
-        ORDER BY r.data_criacao DESC
-    `;
+app.get("/api/reunioes", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows: reunioesRows } = await pool.query(
+      "SELECT id, nome, descricao, data_criacao FROM reunioes ORDER BY data_criacao DESC"
+    );
 
-    db.all(queryReunioes, [], (err, rows) => {
-        if (err) {
-            console.error('Erro ao buscar reuniões:', err);
-            return res.status(500).json({ error: 'Erro ao buscar reuniões.' });
-        }
+    const reunioesComPresencas = [];
+    for (const reuniao of reunioesRows) {
+      const { rows: presencasRows } = await pool.query(
+        "SELECT p.usuario_id, p.status, u.name AS usuario_nome FROM presencas p JOIN users u ON p.usuario_id = u.id WHERE p.reuniao_id = $1",
+        [reuniao.id]
+      );
+      reunioesComPresencas.push({ ...reuniao, presencas: presencasRows });
+    }
 
-        // Agrupar reuniões e presenças
-        const reunioes = rows.reduce((acc, row) => {
-            const { id, nome, descricao, data_criacao, usuario_id, status, usuario_nome } = row;
-
-            if (!acc[id]) {
-                acc[id] = {
-                    id,
-                    nome,
-                    descricao,
-                    data_criacao,
-                    presencas: []
-                };
-            }
-
-            if (usuario_id) {
-                acc[id].presencas.push({ usuario_id, usuario_nome, status });
-            }
-
-            return acc;
-        }, {});
-
-        res.json(Object.values(reunioes));
-    });
+    res.json(reunioesComPresencas);
+  } catch (err) {
+    console.error("Erro ao buscar reuniões:", err);
+    res.status(500).json({ error: "Erro ao buscar reuniões." });
+  }
 });
 
 // Rota para atualizar uma reunião
-app.put('/api/reunioes/:id', (req, res) => {
-    const { id } = req.params;
-    const { nome, descricao, presencas } = req.body;
+app.put("/api/reunioes/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  const { nome, descricao, presencas } = req.body;
 
-    console.log('Atualizando reunião:', { id, nome, descricao, presencas });
+  console.log("Atualizando reunião:", { id, nome, descricao, presencas });
 
-    if (!nome || !descricao || !presencas) {
-        return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
+  if (!nome || !descricao || !presencas) {
+    return res.status(400).json({ error: "Todos os campos são obrigatórios." });
+  }
+  try {
+    await pool.query("UPDATE reunioes SET nome = $1, descricao = $2 WHERE id = $3", [nome, descricao, id]);
+
+    await pool.query("DELETE FROM presencas WHERE reuniao_id = $1", [id]);
+
+    for (const usuario of presencas) {
+      await pool.query(
+        "INSERT INTO presencas (reuniao_id, usuario_id, status) VALUES ($1, $2, $3)",
+        [id, usuario.id, usuario.status]
+      );
     }
 
-    // Atualizar a reunião
-    const query = `UPDATE reunioes SET nome = ?, descricao = ? WHERE id = ?`;
-    db.run(query, [nome, descricao, id], function (err) {
-        if (err) {
-            console.error('Erro ao atualizar reunião:', err);
-            return res.status(500).json({ error: 'Erro ao atualizar a reunião.' });
-        }
-
-        // Atualizar as presenças
-        const deletePresencasQuery = `DELETE FROM presencas WHERE reuniao_id = ?`;
-        db.run(deletePresencasQuery, [id], (err) => {
-            if (err) {
-                console.error('Erro ao deletar presenças antigas:', err);
-                return res.status(500).json({ error: 'Erro ao atualizar as presenças.' });
-            }
-
-            const insertPresencasQuery = `INSERT INTO presencas (reuniao_id, usuario_id, status) VALUES (?, ?, ?)`;
-            const stmt = db.prepare(insertPresencasQuery);
-
-            presencas.forEach(usuario => {
-                stmt.run(id, usuario.id, usuario.status, (err) => {
-                    if (err) {
-                        console.error('Erro ao inserir presença:', err);
-                    }
-                });
-            });
-
-            stmt.finalize();
-            res.status(200).json({ message: 'Reunião atualizada com sucesso!' });
-        });
-    });
+    res.json({ message: "Reunião atualizada com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao atualizar reunião:", err);
+    res.status(500).json({ error: "Erro ao atualizar a reunião." });
+  }
 });
 
-// Rota para excluir uma reunião
-app.delete('/api/reunioes/:id', (req, res) => {
-    const { id } = req.params;
-
-    console.log('Excluindo reunião:', id);
-
-    const deletePresencasQuery = `DELETE FROM presencas WHERE reuniao_id = ?`;
-    db.run(deletePresencasQuery, [id], (err) => {
-        if (err) {
-            console.error('Erro ao deletar presenças:', err);
-            return res.status(500).json({ error: 'Erro ao excluir as presenças.' });
-        }
-
-        const deleteReuniaoQuery = `DELETE FROM reunioes WHERE id = ?`;
-        db.run(deleteReuniaoQuery, [id], (err) => {
-            if (err) {
-                console.error('Erro ao deletar reunião:', err);
-                return res.status(500).json({ error: 'Erro ao excluir a reunião.' });
-            }
-
-            res.status(200).json({ message: 'Reunião excluída com sucesso!' });
-        });
-    });
+// Rota para deletar uma reunião
+app.delete("/api/reunioes/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM presencas WHERE reuniao_id = $1", [id]);
+    await pool.query("DELETE FROM reunioes WHERE id = $1", [id]);
+    res.json({ message: "Reunião deletada com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar reunião:", err);
+    res.status(500).json({ error: "Erro ao deletar a reunião." });
+  }
 });
 
-// Rota para buscar uma reunião por ID
-app.get('/api/reunioes/:id', (req, res) => {
-    const { id } = req.params;
-
-    const queryReuniao = `
-        SELECT r.id, r.nome, r.descricao, r.data_criacao,
-               p.usuario_id, p.status, u.name AS usuario_nome
-        FROM reunioes r
-        LEFT JOIN presencas p ON r.id = p.reuniao_id
-        LEFT JOIN users u ON p.usuario_id = u.id
-        WHERE r.id = ?
-    `;
-
-    db.all(queryReuniao, [id], (err, rows) => {
-        if (err) {
-            console.error('Erro ao buscar reunião:', err);
-            return res.status(500).json({ error: 'Erro ao buscar reunião.' });
-        }
-
-        if (rows.length === 0) {
-            return res.status(404).json({ error: 'Reunião não encontrada.' });
-        }
-
-        // Agrupar os dados da reunião
-        const { nome, descricao, data_criacao } = rows[0];
-        const presencas = rows.map(row => ({
-            usuario_id: row.usuario_id,
-            usuario_nome: row.usuario_nome,
-            status: row.status
-        }));
-
-        res.json({ id, nome, descricao, data_criacao, presencas });
-    });
-});
-
-// Rota para listar usuários
-app.get('/api/usuarios', (req, res) => {
-    db.all(`SELECT id, name FROM users`, [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: 'Erro ao buscar usuários.' });
-        }
-        res.json(rows);
-    });
-});
-
-// Rota de Login
-app.post('/api/login', (req, res) => {
-    const { email, password } = req.body;
-
-    console.log('E-mail recebido:', email);
-    console.log('Senha recebida:', password);
-
-    if (!email || !password) {
-        return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
-    }
-
-    const query = `SELECT * FROM users WHERE email = ?`;
-    db.get(query, [email], (err, user) => {
-        if (err) {
-            console.error('Erro ao buscar usuário:', err);
-            return res.status(500).json({ error: 'Erro ao buscar usuário.' });
-        }
-
-        if (!user) {
-            console.log('Usuário não encontrado.');
-            return res.status(401).json({ error: 'Credenciais inválidas.' });
-        }
-
-        console.log('Usuário encontrado:', user);
-
-        if (user.password !== password) {
-            console.log('Senha incorreta.');
-            return res.status(401).json({ error: 'Credenciais inválidas.' });
-        }
-
-        console.log('Login bem-sucedido.');
-        res.status(200).json({ message: 'Login realizado com sucesso!', user });
-    });
-});
-
-
-//end point relatorio
-app.get('/api/relatorios', (req, res) => {
-    db.all(`SELECT * FROM relatorios ORDER BY data_envio DESC`, [], (err, rows) => {
-        if (err) {
-            console.error('Erro ao buscar relatórios:', err);
-            return res.status(500).json({ error: 'Erro ao buscar relatórios.' });
-        }
-        res.json(rows);
-    });
-});
-
-// Rota para atualizar status e observação do relatório
-app.put('/api/relatorios/:id', (req, res) => {
-    const { id } = req.params;
-    const { status, observacao } = req.body;
-
-    db.run(
-        `UPDATE relatorios SET status = ?, observacao = ? WHERE id = ?`,
-        [status, observacao, id],
-        function (err) {
-            if (err) {
-                console.error('Erro ao atualizar relatório:', err);
-                return res.status(500).json({ error: 'Erro ao atualizar relatório.' });
-            }
-            res.json({ message: 'Relatório atualizado com sucesso!' });
-        }
+// Rotas de Relatórios
+app.post("/api/relatorios", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { tipo, projeto, coordenador, status, conteudo, observacao, usuario_email } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO relatorios (tipo, projeto, coordenador, status, conteudo, observacao, usuario_email) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+      [tipo, projeto, coordenador, status, conteudo, observacao, usuario_email]
     );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao salvar relatório:", err);
+    res.status(500).json({ error: "Erro ao salvar relatório." });
+  }
 });
 
-// Rota comissões
-// Cadastrar uma nova comissão
-app.post('/api/comissoes', (req, res) => {
-    const { nome, tipo, coordenador_id, coordenador_nome } = req.body;
-    db.run(
-        `INSERT INTO comissoes (nome, tipo, coordenador_id, coordenador_nome) VALUES (?, ?, ?, ?)`,
-        [nome, tipo, coordenador_id, coordenador_nome],
-        function (err) {
-            if (err) {
-                console.error('Erro ao cadastrar comissão:', err);
-                return res.status(500).json({ error: 'Erro ao cadastrar comissão.' });
-            }
-            res.json({ id: this.lastID });
-        }
+app.get("/api/relatorios", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM relatorios ORDER BY data_envio DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar relatórios:", err);
+    res.status(500).json({ error: "Erro ao buscar relatórios." });
+  }
+});
+
+app.put("/api/relatorios/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  const { status, observacao } = req.body;
+  try {
+    await pool.query(
+      "UPDATE relatorios SET status = $1, observacao = $2 WHERE id = $3",
+      [status, observacao, id]
     );
+    res.json({ message: "Status do relatório atualizado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao atualizar status do relatório:", err);
+    res.status(500).json({ error: "Erro ao atualizar status do relatório." });
+  }
 });
 
-// Listar todas as comissões
-app.get('/api/comissoes', (req, res) => {
-    db.all(`SELECT * FROM comissoes ORDER BY data_criacao DESC`, [], (err, rows) => {
-        if (err) {
-            console.error('Erro ao buscar comissões:', err);
-            return res.status(500).json({ error: 'Erro ao buscar comissões.' });
-        }
-        res.json(rows);
-    });
-});
-
-// Adicionar membro à comissão
-app.post('/api/membros_comissao', (req, res) => {
-    const { comissao_id, usuario_id, nome, email, funcao, senha } = req.body;
-
-    function inserirMembro(usuarioId) {
-        db.run(
-            `INSERT INTO membros_comissao (comissao_id, usuario_id, nome, email, funcao) VALUES (?, ?, ?, ?, ?)`,
-            [comissao_id, usuarioId, nome, email, funcao],
-            function (err) {
-                if (err) {
-                    console.error('Erro ao adicionar membro:', err);
-                    return res.status(500).json({ error: 'Erro ao adicionar membro.' });
-                }
-                res.json({ id: this.lastID });
-            }
-        );
-    }
-
-    if (!usuario_id) {
-        // Cria novo usuário fixo
-        db.run(
-            `INSERT INTO users (name, email, role, sector, password) VALUES (?, ?, ?, ?, ?)`,
-            [nome, email, 'membro', 'Comissão', senha],
-            function (err) {
-                if (err) {
-                    console.error('Erro ao criar usuário:', err);
-                    return res.status(500).json({ error: 'Erro ao criar usuário.' });
-                }
-                inserirMembro(this.lastID);
-            }
-        );
-    } else {
-        inserirMembro(usuario_id);
-    }
-});
-
-// Listar membros de uma comissão
-app.get('/api/comissoes/:id/membros', (req, res) => {
-    const { id } = req.params;
-    db.all(
-        `SELECT * FROM membros_comissao WHERE comissao_id = ?`,
-        [id],
-        (err, rows) => {
-            if (err) {
-                console.error('Erro ao buscar membros:', err);
-                return res.status(500).json({ error: 'Erro ao buscar membros.' });
-            }
-            res.json(rows);
-        }
+// Rotas de Comissões
+app.post("/api/comissoes", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { nome, tipo, coordenador_id, coordenador_nome } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO comissoes (nome, tipo, coordenador_id, coordenador_nome) VALUES ($1, $2, $3, $4) RETURNING id",
+      [nome, tipo, coordenador_id, coordenador_nome]
     );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao salvar comissão:", err);
+    res.status(500).json({ error: "Erro ao salvar comissão." });
+  }
 });
 
-// Editar comissão
-app.put('/api/comissoes/:id', (req, res) => {
-    const { id } = req.params;
-    const { nome, tipo, coordenador_id, coordenador_nome } = req.body;
-    db.run(
-        `UPDATE comissoes SET nome = ?, tipo = ?, coordenador_id = ?, coordenador_nome = ? WHERE id = ?`,
-        [nome, tipo, coordenador_id, coordenador_nome, id],
-        function (err) {
-            if (err) {
-                console.error('Erro ao editar comissão:', err);
-                return res.status(500).json({ error: 'Erro ao editar comissão.' });
-            }
-            res.json({ message: 'Comissão atualizada com sucesso!' });
-        }
+app.get("/api/comissoes", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM comissoes ORDER BY data_criacao DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar comissões:", err);
+    res.status(500).json({ error: "Erro ao buscar comissões." });
+  }
+});
+
+app.put("/api/comissoes/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  const { nome, tipo, coordenador_id, coordenador_nome } = req.body;
+  try {
+    await pool.query(
+      "UPDATE comissoes SET nome = $1, tipo = $2, coordenador_id = $3, coordenador_nome = $4 WHERE id = $5",
+      [nome, tipo, coordenador_id, coordenador_nome, id]
     );
+    res.json({ message: "Comissão atualizada com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao atualizar comissão:", err);
+    res.status(500).json({ error: "Erro ao atualizar comissão." });
+  }
 });
 
-// Remover comissão
-app.delete('/api/comissoes/:id', (req, res) => {
-    const { id } = req.params;
-    db.run(`DELETE FROM comissoes WHERE id = ?`, [id], function (err) {
-        if (err) {
-            console.error('Erro ao remover comissão:', err);
-            return res.status(500).json({ error: 'Erro ao remover comissão.' });
-        }
-        // Remove também os membros dessa comissão
-        db.run(`DELETE FROM membros_comissao WHERE comissao_id = ?`, [id], function (err2) {
-            if (err2) {
-                console.error('Erro ao remover membros da comissão:', err2);
-            }
-            res.json({ message: 'Comissão removida com sucesso!' });
-        });
-    });
+app.delete("/api/comissoes/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM comissoes WHERE id = $1", [id]);
+    res.json({ message: "Comissão deletada com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar comissão:", err);
+    res.status(500).json({ error: "Erro ao deletar comissão." });
+  }
 });
 
-// Editar membro da comissão
-app.put('/api/membros_comissao/:id', (req, res) => {
-    const { id } = req.params;
-    const { nome, email, funcao } = req.body;
-    db.run(
-        `UPDATE membros_comissao SET nome = ?, email = ?, funcao = ? WHERE id = ?`,
-        [nome, email, funcao, id],
-        function (err) {
-            if (err) {
-                console.error('Erro ao editar membro:', err);
-                return res.status(500).json({ error: 'Erro ao editar membro.' });
-            }
-            res.json({ message: 'Membro atualizado com sucesso!' });
-        }
+// Rotas de Tarefas
+app.post("/api/tarefas", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { titulo, descricao, data_limite, tipo_destinatario, destinatario_id } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO tarefas (titulo, descricao, data_limite, tipo_destinatario, destinatario_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [titulo, descricao, data_limite, tipo_destinatario, destinatario_id]
     );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao salvar tarefa:", err);
+    res.status(500).json({ error: "Erro ao salvar tarefa." });
+  }
 });
 
-// Remover membro da comissão
-app.delete('/api/membros_comissao/:id', (req, res) => {
-    const { id } = req.params;
-    db.run(`DELETE FROM membros_comissao WHERE id = ?`, [id], function (err) {
-        if (err) {
-            console.error('Erro ao remover membro:', err);
-            return res.status(500).json({ error: 'Erro ao remover membro.' });
-        }
-        res.json({ message: 'Membro removido com sucesso!' });
-    });
+app.get("/api/tarefas", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM tarefas ORDER BY data_criacao DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar tarefas:", err);
+    res.status(500).json({ error: "Erro ao buscar tarefas." });
+  }
 });
 
-// Criar tarefa
-app.post('/api/tarefas', (req, res) => {
-    const { titulo, descricao, data_limite, tipo_destinatario, destinatario_id } = req.body;
-    db.run(
-        `INSERT INTO tarefas (titulo, descricao, data_limite, tipo_destinatario, destinatario_id) VALUES (?, ?, ?, ?, ?)`,
-        [titulo, descricao, data_limite, tipo_destinatario, destinatario_id],
-        function (err) {
-            if (err) {
-                console.error('Erro ao criar tarefa:', err);
-                return res.status(500).json({ error: 'Erro ao criar tarefa.' });
-            }
-            res.json({ id: this.lastID });
-        }
+app.put("/api/tarefas/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  const { status } = req.body;
+  try {
+    await pool.query("UPDATE tarefas SET status = $1 WHERE id = $2", [status, id]);
+    res.json({ message: "Status da tarefa atualizado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao atualizar status da tarefa:", err);
+    res.status(500).json({ error: "Erro ao atualizar status da tarefa." });
+  }
+});
+
+app.delete("/api/tarefas/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM tarefas WHERE id = $1", [id]);
+    res.json({ message: "Tarefa deletada com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar tarefa:", err);
+    res.status(500).json({ error: "Erro ao deletar tarefa." });
+  }
+});
+
+// Rotas de Arquivos
+const upload = multer({ dest: "uploads/" });
+
+app.post("/api/arquivos", upload.single("arquivo"), async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { originalname, mimetype, filename } = req.file;
+  const { categoria } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO arquivos (nome_original, nome_armazenado, tipo, categoria) VALUES ($1, $2, $3, $4) RETURNING id",
+      [originalname, filename, mimetype, categoria]
     );
+    res.status(201).json({ id: rows[0].id, message: "Arquivo enviado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao salvar arquivo:", err);
+    res.status(500).json({ error: "Erro ao salvar arquivo." });
+  }
 });
 
-// Listar tarefas
-app.get('/api/tarefas', (req, res) => {
-    db.all(`SELECT * FROM tarefas ORDER BY data_criacao DESC`, [], (err, rows) => {
-        if (err) {
-            console.error('Erro ao buscar tarefas:', err);
-            return res.status(500).json({ error: 'Erro ao buscar tarefas.' });
-        }
-        res.json(rows);
-    });
+app.get("/api/arquivos", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM arquivos ORDER BY data_upload DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar arquivos:", err);
+    res.status(500).json({ error: "Erro ao buscar arquivos." });
+  }
 });
 
-// Atualizar status ou editar tarefa
-app.put('/api/tarefas/:id', (req, res) => {
-    const { id } = req.params;
-    const { titulo, descricao, data_limite, status } = req.body;
-
-    // Construir dinamicamente a query SQL com base nos campos enviados
-    const updates = [];
-    const values = [];
-
-    if (titulo !== undefined) {
-        updates.push('titulo = ?');
-        values.push(titulo);
+app.delete("/api/arquivos/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    // Primeiro, obtenha o nome do arquivo armazenado para deletá-lo do sistema de arquivos
+    const { rows } = await pool.query("SELECT nome_armazenado FROM arquivos WHERE id = $1", [id]);
+    if (rows.length > 0) {
+      const filePath = path.join(__dirname, "uploads", rows[0].nome_armazenado);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error("Erro ao deletar arquivo do sistema de arquivos:", err);
+      });
     }
-    if (descricao !== undefined) {
-        updates.push('descricao = ?');
-        values.push(descricao);
-    }
-    if (data_limite !== undefined) {
-        updates.push('data_limite = ?');
-        values.push(data_limite);
-    }
-    if (status !== undefined) {
-        updates.push('status = ?');
-        values.push(status);
-    }
-
-    // Se nenhum campo foi enviado, retorna erro
-    if (updates.length === 0) {
-        return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
-    }
-
-    values.push(id); // Adiciona o ID ao final dos valores
-
-    const query = `UPDATE tarefas SET ${updates.join(', ')} WHERE id = ?`;
-
-    db.run(query, values, function (err) {
-        if (err) {
-            console.error('Erro ao editar tarefa:', err);
-            return res.status(500).json({ error: 'Erro ao editar tarefa.' });
-        }
-        res.json({ message: 'Tarefa atualizada com sucesso!' });
-    });
+    await pool.query("DELETE FROM arquivos WHERE id = $1", [id]);
+    res.json({ message: "Arquivo deletado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar arquivo:", err);
+    res.status(500).json({ error: "Erro ao deletar arquivo." });
+  }
 });
 
-// Editar tarefa
-app.put('/api/tarefas/:id', (req, res) => {
-    const { id } = req.params;
-    const { titulo, descricao, data_limite, tipo_destinatario, destinatario_id, status } = req.body;
-    db.run(
-        `UPDATE tarefas SET titulo = ?, descricao = ?, data_limite = ?, tipo_destinatario = ?, destinatario_id = ?, status = ? WHERE id = ?`,
-        [titulo, descricao, data_limite, tipo_destinatario, destinatario_id, status, id],
-        function (err) {
-            if (err) {
-                console.error('Erro ao editar tarefa:', err);
-                return res.status(500).json({ error: 'Erro ao editar tarefa.' });
-            }
-            res.json({ message: 'Tarefa atualizada com sucesso!' });
-        }
-    );
-});
-
-// Remover tarefa
-app.delete('/api/tarefas/:id', (req, res) => {
-    const { id } = req.params;
-    db.run(`DELETE FROM tarefas WHERE id = ?`, [id], function (err) {
-        if (err) {
-            console.error('Erro ao remover tarefa:', err);
-            return res.status(500).json({ error: 'Erro ao remover tarefa.' });
-        }
-        res.json({ message: 'Tarefa removida com sucesso!' });
-    });
-});
-
-//rota para excluir arquivo 
-
-app.delete('/api/arquivos/:id', (req, res) => {
-    const { id } = req.params;
-    db.get(`SELECT nome_armazenado FROM arquivos WHERE id = ?`, [id], (err, row) => {
-        if (err || !row) return res.status(404).json({ error: 'Arquivo não encontrado.' });
-        const filePath = path.join(__dirname, 'uploads', row.nome_armazenado);
-        fs.unlink(filePath, () => {
-            db.run(`DELETE FROM arquivos WHERE id = ?`, [id], function (err2) {
-                if (err2) return res.status(500).json({ error: 'Erro ao excluir do banco.' });
-                res.json({ message: 'Arquivo excluído com sucesso!' });
-            });
-        });
-    });
-});
-
-// Criar evento
-app.post('/api/eventos', (req, res) => {
+// Rotas de Eventos
+app.post("/api/eventos", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
   const { titulo, descricao, inicio, fim, tipo, criado_por } = req.body;
-  db.run(
-    `INSERT INTO eventos (titulo, descricao, inicio, fim, tipo, criado_por) VALUES (?, ?, ?, ?, ?, ?)`,
-    [titulo, descricao, inicio, fim, tipo, criado_por],
-    function (err) {
-      if (err) {
-        console.error('Erro ao criar evento:', err);
-        return res.status(500).json({ error: 'Erro ao criar evento.' });
-      }
-      res.json({ id: this.lastID });
-    }
-  );
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO eventos (titulo, descricao, inicio, fim, tipo, criado_por) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+      [titulo, descricao, inicio, fim, tipo, criado_por]
+    );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao salvar evento:", err);
+    res.status(500).json({ error: "Erro ao salvar evento." });
+  }
 });
 
-// Listar eventos
-app.get('/api/eventos', (req, res) => {
-  db.all(`SELECT * FROM eventos ORDER BY inicio ASC`, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar eventos:', err);
-      return res.status(500).json({ error: 'Erro ao buscar eventos.' });
-    }
+app.get("/api/eventos", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM eventos ORDER BY data_criacao DESC");
     res.json(rows);
-  });
+  } catch (err) {
+    console.error("Erro ao buscar eventos:", err);
+    res.status(500).json({ error: "Erro ao buscar eventos." });
+  }
 });
 
-// Editar evento
-app.put('/api/eventos/:id', (req, res) => {
+app.put("/api/eventos/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
   const { id } = req.params;
-  const { titulo, descricao, inicio, fim, tipo } = req.body;
-  db.run(
-    `UPDATE eventos SET titulo = ?, descricao = ?, inicio = ?, fim = ?, tipo = ? WHERE id = ?`,
-    [titulo, descricao, inicio, fim, tipo, id],
-    function (err) {
-      if (err) {
-        console.error('Erro ao editar evento:', err);
-        return res.status(500).json({ error: 'Erro ao editar evento.' });
-      }
-      res.json({ message: 'Evento atualizado com sucesso!' });
-    }
-  );
+  const { titulo, descricao, inicio, fim, tipo, criado_por } = req.body;
+  try {
+    await pool.query(
+      "UPDATE eventos SET titulo = $1, descricao = $2, inicio = $3, fim = $4, tipo = $5, criado_por = $6 WHERE id = $7",
+      [titulo, descricao, inicio, fim, tipo, criado_por, id]
+    );
+    res.json({ message: "Evento atualizado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao atualizar evento:", err);
+    res.status(500).json({ error: "Erro ao atualizar evento." });
+  }
 });
 
-// Remover evento
-app.delete('/api/eventos/:id', (req, res) => {
+app.delete("/api/eventos/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
   const { id } = req.params;
-  db.run(`DELETE FROM eventos WHERE id = ?`, [id], function (err) {
-    if (err) {
-      console.error('Erro ao remover evento:', err);
-      return res.status(500).json({ error: 'Erro ao remover evento.' });
-    }
-    res.json({ message: 'Evento removido com sucesso!' });
-  });
+  try {
+    await pool.query("DELETE FROM eventos WHERE id = $1", [id]);
+    res.json({ message: "Evento deletado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar evento:", err);
+    res.status(500).json({ error: "Erro ao deletar evento." });
+  }
 });
 
-app.get('/api/ranking', (req, res) => {
-  db.all(`
-    SELECT u.id, u.name,
-      (SELECT COUNT(*) FROM presencas WHERE usuario_id = u.id) AS presencas,
-      (SELECT COUNT(*) FROM tarefas WHERE destinatario_id = u.id AND status = 'Concluída') AS tarefas_concluidas,
-      ((SELECT COUNT(*) FROM presencas WHERE usuario_id = u.id) +
-       (SELECT COUNT(*) FROM tarefas WHERE destinatario_id = u.id AND status = 'Concluída')) AS pontos
-    FROM users u
-    ORDER BY pontos DESC, u.name ASC
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Erro ao buscar ranking:', err);
-      return res.status(500).json({ error: 'Erro ao buscar ranking.' });
-    }
+// Rotas de Produtos (Cantina)
+app.post("/api/produtos", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { nome, preco, quantidade } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO produtos (nome, preco, quantidade) VALUES ($1, $2, $3) RETURNING id",
+      [nome, preco, quantidade]
+    );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao salvar produto:", err);
+    res.status(500).json({ error: "Erro ao salvar produto." });
+  }
+});
+
+app.get("/api/produtos", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM produtos ORDER BY nome ASC");
     res.json(rows);
-  });
+  } catch (err) {
+    console.error("Erro ao buscar produtos:", err);
+    res.status(500).json({ error: "Erro ao buscar produtos." });
+  }
 });
 
-// Criar relatório
-app.post('/api/relatorios', (req, res) => {
-    const { tipo, projeto, coordenador, conteudo, observacao, usuario_email } = req.body;
-    db.run(
-        `INSERT INTO relatorios (tipo, projeto, coordenador, status, conteudo, observacao, usuario_email) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [tipo, projeto, coordenador, 'Pendente', conteudo, observacao, usuario_email],
-        function (err) {
-            if (err) {
-                console.error('Erro ao criar relatório:', err);
-                return res.status(500).json({ error: 'Erro ao criar relatório.' });
-            }
-            res.json({ id: this.lastID });
-        }
+app.put("/api/produtos/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  const { nome, preco, quantidade } = req.body;
+  try {
+    await pool.query(
+      "UPDATE produtos SET nome = $1, preco = $2, quantidade = $3 WHERE id = $4",
+      [nome, preco, quantidade, id]
     );
+    res.json({ message: "Produto atualizado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao atualizar produto:", err);
+    res.status(500).json({ error: "Erro ao atualizar produto." });
+  }
 });
 
-
-// Rota para listar produtos
-app.get('/api/produtos', (req, res) => {
-    db.all(`SELECT * FROM produtos ORDER BY id ASC`, [], (err, rows) => {
-        if (err) {
-            console.error('Erro ao buscar produtos:', err);
-            return res.status(500).json({ error: 'Erro ao buscar produtos.' });
-        }
-        res.json(rows);
-    });
+app.delete("/api/produtos/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM produtos WHERE id = $1", [id]);
+    res.json({ message: "Produto deletado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar produto:", err);
+    res.status(500).json({ error: "Erro ao deletar produto." });
+  }
 });
 
-// Rota para cadastrar produtos
-app.post('/api/produtos', (req, res) => {
-    const { nome, preco, quantidade } = req.body;
-    db.run(
-        `INSERT INTO produtos (nome, preco, quantidade) VALUES (?, ?, ?)`,
-        [nome, preco, quantidade],
-        function (err) {
-            if (err) {
-                console.error('Erro ao salvar produto:', err);
-                return res.status(500).json({ error: 'Erro ao salvar produto.' });
-            }
-            res.json({ id: this.lastID });
-        }
+// Rotas de Vendas (Cantina)
+app.post("/api/vendas", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { produtos, total, valorRecebido, troco } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO vendas (produtos, total, valorRecebido, troco) VALUES ($1, $2, $3, $4) RETURNING id",
+      [JSON.stringify(produtos), total, valorRecebido, troco]
     );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao registrar venda:", err);
+    res.status(500).json({ error: "Erro ao registrar venda." });
+  }
 });
 
-// Rota para registrar vendas
-app.post('/api/vendas', (req, res) => {
-    const { produtos, total, valorRecebido, troco } = req.body;
-    db.run(
-        `INSERT INTO vendas (produtos, total, valorRecebido, troco) VALUES (?, ?, ?, ?)`,
-        [JSON.stringify(produtos), total, valorRecebido, troco],
-        function (err) {
-            if (err) {
-                console.error('Erro ao salvar venda:', err);
-                return res.status(500).json({ error: 'Erro ao salvar venda.' });
-            }
-            res.json({ id: this.lastID });
-        }
+app.get("/api/vendas", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM vendas ORDER BY data_venda DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar vendas:", err);
+    res.status(500).json({ error: "Erro ao buscar vendas." });
+  }
+});
+
+// Rotas de Áudios (Rádio GSD Mix)
+app.post("/api/audios", upload.single("audio"), async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { originalname, mimetype, filename } = req.file;
+  const { descricao } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO audios (nome_original, nome_armazenado, tipo, descricao) VALUES ($1, $2, $3, $4) RETURNING id",
+      [originalname, filename, mimetype, descricao]
     );
+    res.status(201).json({ id: rows[0].id, message: "Áudio enviado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao salvar áudio:", err);
+    res.status(500).json({ error: "Erro ao salvar áudio." });
+  }
 });
 
+app.get("/api/audios", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM audios ORDER BY data_upload DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar áudios:", err);
+    res.status(500).json({ error: "Erro ao buscar áudios." });
+  }
+});
 
-// Inicializar o servidor
+app.delete("/api/audios/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query("SELECT nome_armazenado FROM audios WHERE id = $1", [id]);
+    if (rows.length > 0) {
+      const filePath = path.join(__dirname, "uploads", rows[0].nome_armazenado);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error("Erro ao deletar arquivo de áudio do sistema de arquivos:", err);
+      });
+    }
+    await pool.query("DELETE FROM audios WHERE id = $1", [id]);
+    res.json({ message: "Áudio deletado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar áudio:", err);
+    res.status(500).json({ error: "Erro ao deletar áudio." });
+  }
+});
+
+// Rotas de Comunicados (Rádio GSD Mix)
+app.post("/api/comunicados", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { mensagem } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO comunicados (mensagem) VALUES ($1) RETURNING id",
+      [mensagem]
+    );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao salvar comunicado:", err);
+    res.status(500).json({ error: "Erro ao salvar comunicado." });
+  }
+});
+
+app.get("/api/comunicados", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM comunicados ORDER BY data_envio DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar comunicados:", err);
+    res.status(500).json({ error: "Erro ao buscar comunicados." });
+  }
+});
+
+app.delete("/api/comunicados/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM comunicados WHERE id = $1", [id]);
+    res.json({ message: "Comunicado deletado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar comunicado:", err);
+    res.status(500).json({ error: "Erro ao deletar comunicado." });
+  }
+});
+
+// Rotas de Eventos da Rádio (Rádio GSD Mix)
+app.post("/api/eventos-radio", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { titulo, inicio, fim, descricao } = req.body;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO eventos_radio (titulo, inicio, fim, descricao) VALUES ($1, $2, $3, $4) RETURNING id",
+      [titulo, inicio, fim, descricao]
+    );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    console.error("Erro ao salvar evento da rádio:", err);
+    res.status(500).json({ error: "Erro ao salvar evento da rádio." });
+  }
+});
+
+app.get("/api/eventos-radio", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  try {
+    const { rows } = await pool.query("SELECT * FROM eventos_radio ORDER BY inicio DESC");
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar eventos da rádio:", err);
+    res.status(500).json({ error: "Erro ao buscar eventos da rádio." });
+  }
+});
+
+app.put("/api/eventos-radio/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  const { titulo, inicio, fim, descricao } = req.body;
+  try {
+    await pool.query(
+      "UPDATE eventos_radio SET titulo = $1, inicio = $2, fim = $3, descricao = $4 WHERE id = $5",
+      [titulo, inicio, fim, descricao, id]
+    );
+    res.json({ message: "Evento da rádio atualizado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao atualizar evento da rádio:", err);
+    res.status(500).json({ error: "Erro ao atualizar evento da rádio." });
+  }
+});
+
+app.delete("/api/eventos-radio/:id", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM eventos_radio WHERE id = $1", [id]);
+    res.json({ message: "Evento da rádio deletado com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao deletar evento da rádio:", err);
+    res.status(500).json({ error: "Erro ao deletar evento da rádio." });
+  }
+});
+
+// Rota para upload de foto de perfil
+app.post("/api/usuarios/foto", upload.single("foto"), async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { email } = req.body;
+  const foto_url = `/uploads/${req.file.filename}`;
+  try {
+    await pool.query("UPDATE users SET foto_url = $1 WHERE email = $2", [foto_url, email]);
+    res.json({ message: "Foto de perfil atualizada com sucesso!", foto_url });
+  } catch (err) {
+    console.error("Erro ao atualizar foto de perfil:", err);
+    res.status(500).json({ error: "Erro ao atualizar foto de perfil." });
+  }
+});
+
+// Rota para obter usuário por email (para carregar foto de perfil)
+app.get("/api/usuarios", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Banco de dados não configurado." });
+  }
+  const { email } = req.query;
+  try {
+    const { rows } = await pool.query("SELECT id, name, email, role, sector, foto_url FROM users WHERE email = $1", [email]);
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar usuário por email:", err);
+    res.status(500).json({ error: "Erro ao buscar usuário por email." });
+  }
+});
+
+// Iniciar o servidor
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
+
+

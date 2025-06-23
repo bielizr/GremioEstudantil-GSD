@@ -31,7 +31,7 @@ function carregarRegistroReunioes() {
 // Função para carregar a lista de chamada (dados do backend)
 async function carregarListaChamada() {
   try {
-    const response = await fetch('/api/usuarios');
+    const response = await fetch(`${API_BASE_URL}/api/usuarios`);
     if (!response.ok) {
       throw new Error('Erro ao buscar usuários.');
     }
@@ -66,7 +66,7 @@ document.addEventListener('submit', async function (event) {
 
     try {
       // Enviar os dados para o backend
-      const response = await fetch('/api/reunioes', {
+      const response = await fetch(`${API_BASE_URL}/api/reunioes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, descricao, presencas }),
@@ -89,15 +89,15 @@ document.addEventListener('submit', async function (event) {
 // Função para carregar a interface de exibição de reuniões
 async function carregarReunioesSalvas() {
   try {
-    const response = await fetch('/api/reunioes');
+    const response = await fetch(`${API_BASE_URL}/api/reunioes`);
     if (!response.ok) {
-      throw new Error('Erro ao buscar reuniões.');
+      throw new Error("Erro ao buscar reuniões.");
     }
 
     const reunioes = await response.json();
 
     // Atualizar o conteúdo da página
-    const content = document.getElementById('content');
+    const content = document.getElementById("content");
     content.innerHTML = `
           <h2 class="text-xl font-bold mb-4">Reuniões Salvas</h2>
           <div id="lista-reunioes" class="space-y-4">
@@ -110,30 +110,30 @@ async function carregarReunioesSalvas() {
                       <ul class="list-disc pl-5">
                           ${reuniao.presencas.map(presenca => `
                               <li>${presenca.usuario_nome} - ${presenca.status}</li>
-                          `).join('')}
+                          `).join("")}
                       </ul>
                   </div>
-              `).join('')}
+              `).join("")}
           </div>
       `;
   } catch (error) {
-    console.error('Erro ao carregar reuniões:', error);
-    alert('Erro ao carregar reuniões.');
+    console.error("Erro ao carregar reuniões:", error);
+    alert("Erro ao carregar reuniões.");
   }
 }
 
 // Função para carregar a interface de exibição de reuniões
 async function carregarReunioesSalvas() {
   try {
-    const response = await fetch('/api/reunioes');
+    const response = await fetch(`${API_BASE_URL}/api/reunioes`);
     if (!response.ok) {
-      throw new Error('Erro ao buscar reuniões.');
+      throw new Error("Erro ao buscar reuniões.");
     }
 
     const reunioes = await response.json();
 
     // Atualizar o conteúdo da página
-    const content = document.getElementById('content');
+    const content = document.getElementById("content");
 content.innerHTML = `
   <div class="max-w-4xl mx-auto">
     <h2 class="text-2xl font-bold mb-6 text-blue-800 flex items-center gap-2">
@@ -168,8 +168,8 @@ content.innerHTML = `
   </div>
 `;
   } catch (error) {
-    console.error('Erro ao carregar reuniões:', error);
-    alert('Erro ao carregar reuniões.');
+    console.error("Erro ao carregar reuniões:", error);
+    alert("Erro ao carregar reuniões.");
   }
 }
 
@@ -178,7 +178,7 @@ async function excluirReuniao(id) {
   if (!confirm('Tem certeza que deseja excluir esta reunião?')) return;
 
   try {
-    const response = await fetch(`/api/reunioes/${id}`, { method: 'DELETE' });
+    const response = await fetch(`${API_BASE_URL}/api/reunioes/${id}`, { method: 'DELETE' });
     if (!response.ok) {
       throw new Error('Erro ao excluir reunião.');
     }
@@ -194,7 +194,7 @@ async function excluirReuniao(id) {
 // Função para editar uma reunião
 async function editarReuniao(id) {
   try {
-    const response = await fetch(`/api/reunioes/${id}`);
+    const response = await fetch(`${API_BASE_URL}/api/reunioes/${id}`);
     if (!response.ok) {
       throw new Error('Erro ao buscar dados da reunião.');
     }
@@ -292,7 +292,7 @@ async function carregarRelatorios() {
   `;
 
   try {
-    const response = await fetch('/api/relatorios');
+    const response = await fetch(`${API_BASE_URL}/api/relatorios`);
     if (!response.ok) throw new Error('Erro ao buscar relatórios.');
 
     const relatorios = await response.json();
@@ -347,7 +347,7 @@ async function carregarRelatorios() {
 // ...existing code...
 async function visualizarRelatorio(id) {
   // Busca detalhes do relatório
-  const resp = await fetch(`/api/relatorios`);
+  const resp = await fetch(`${API_BASE_URL}/api/relatorios`);
   const relatorios = await resp.json();
   const relatorio = relatorios.find(r => r.id === id);
 

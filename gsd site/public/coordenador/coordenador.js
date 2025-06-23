@@ -123,14 +123,14 @@ async function carregarArquivos() {
   `;
 
   try {
-    const res = await fetch('http://localhost:3000/api/arquivos');
+    const res = await fetch(`${API_BASE_URL}/api/arquivos`);
     const arquivos = await res.json();
 
     const lista = arquivos.map(arq => `
       <div class="bg-gray-50 border rounded-lg p-4 shadow hover:shadow-lg transition">
         <h3 class="font-semibold text-blue-800">${arq.nome_original}</h3>
         <p class="text-gray-600 text-sm">Data de upload: ${new Date(arq.data_upload).toLocaleString()}</p>
-        <a href="http://localhost:3000/uploads/${arq.nome_armazenado}" class="text-blue-600 hover:underline font-semibold" download>
+        <a href="${API_BASE_URL}/uploads/${arq.nome_armazenado}" class="text-blue-600 hover:underline font-semibold" download>
           Baixar Arquivo
         </a>
       </div>
@@ -179,7 +179,7 @@ async function carregarTarefas() {
   }
 
   try {
-    const res = await fetch('http://localhost:3000/api/tarefas');
+    const res = await fetch(`${API_BASE_URL}/api/tarefas`);
     const tarefas = await res.json();
 
     const lista = tarefas.map(tarefa => `
@@ -202,7 +202,7 @@ async function carregarTarefas() {
     button.addEventListener('click', async function () {
       const tarefaId = this.getAttribute('data-id');
       try {
-        await fetch(`http://localhost:3000/api/tarefas/${tarefaId}`, {
+        await fetch(`${API_BASE_URL}/api/tarefas/${tarefaId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Concluída' })
@@ -271,7 +271,7 @@ async function exibirFormularioRelatorio() {
     const userEmail = localStorage.getItem('userEmail'); // Certifique-se de salvar o email do coordenador no localStorage durante o login
 
     try {
-      await fetch('http://localhost:3000/api/relatorios', {
+      await fetch(`${API_BASE_URL}/api/relatorios`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -321,7 +321,7 @@ async function carregarRelatoriosAtualizados() {
   `;
 
   try {
-    const res = await fetch('http://localhost:3000/api/relatorios');
+    const res = await fetch(`${API_BASE_URL}/api/relatorios`);
     const relatorios = await res.json();
 
     const userEmail = localStorage.getItem('userEmail'); // Email do coordenador logado
@@ -580,7 +580,7 @@ async function carregarComissoes() {
   `;
 
   try {
-    const res = await fetch('http://localhost:3000/api/comissoes');
+    const res = await fetch(`${API_BASE_URL}/api/comissoes`);
     const comissoes = await res.json();
     const userEmail = localStorage.getItem('userEmail');
 

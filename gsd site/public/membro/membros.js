@@ -76,7 +76,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('nome-membro').textContent = nome || 'Membro';
   }
   try {
-    const resp = await fetch(`http://localhost:3000/api/usuarios?email=${email}`);
+    const resp = await fetch(`${API_BASE_URL}/api/usuarios?email=${email}`);
     const usuario = (await resp.json())[0];
     if (usuario && usuario.foto_url && document.getElementById('avatar-membro')) {
       document.getElementById('avatar-membro').src = usuario.foto_url;
@@ -92,7 +92,7 @@ if (document.getElementById('input-foto-perfil-membro')) {
     const formData = new FormData();
     formData.append('foto', file);
     formData.append('email', email);
-    const resp = await fetch('http://localhost:3000/api/usuarios/foto', {
+    const resp = await fetch(`${API_BASE_URL}/api/usuarios/foto`, {
       method: 'POST',
       body: formData
     });
