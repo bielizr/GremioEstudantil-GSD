@@ -3,8 +3,19 @@ const path = require("path");
 const { Pool } = require("pg"); // Importa o Pool do pg
 const cors = require("cors");
 const app = express();
-const fs = require("fs");
+const fs = require("fs"); // Import fs module
 const multer = require("multer");
+
+// Garante que os diretórios de uploads existam
+const uploadsDir = path.join(__dirname, 'public', 'uploads'); // Ajustado para estar dentro de public
+const audioUploadsDir = path.join(__dirname, 'public', 'uploads', 'audios'); // Ajustado para estar dentro de public
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(audioUploadsDir)) {
+  fs.mkdirSync(audioUploadsDir, { recursive: true });
+}
 
 // Configuração do CORS
 const corsOptions = {
@@ -220,60 +231,6 @@ async function initializeDatabase() {
       );
     `);
 
-    // Tabela de Produtos
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS produtos (
-        id SERIAL PRIMARY KEY,
-        nome TEXT NOT NULL,
-        preco REAL NOT NULL,
-        quantidade INTEGER NOT NULL
-      );
-    `);
-
-    // Tabela de Vendas
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS vendas (
-        id SERIAL PRIMARY KEY,
-        produtos TEXT NOT NULL,
-        total REAL NOT NULL,
-        valorRecebido REAL NOT NULL,
-        troco REAL NOT NULL,
-        data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Tabela de Áudios da Rádio
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS audios (
-        id SERIAL PRIMARY KEY,
-        nome_original TEXT,
-        nome_armazenado TEXT,
-        tipo TEXT,
-        descricao TEXT,
-        data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Tabela de Comunicados da Rádio
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS comunicados (
-        id SERIAL PRIMARY KEY,
-        mensagem TEXT NOT NULL,
-        data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Tabela de Eventos da Rádio
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS eventos_radio (
-        id SERIAL PRIMARY KEY,
-        titulo TEXT NOT NULL,
-        inicio TEXT NOT NULL,
-        fim TEXT,
-        descricao TEXT
-      );
-    `);
-
     // Inserir dados de exemplo (se as tabelas estiverem vazias)
     const { rowCount: usersCount } = await client.query("SELECT COUNT(*) FROM users");
     if (usersCount === 0) {
@@ -347,11 +304,11 @@ async function initializeDatabase() {
 initializeDatabase();
 
 // Serve arquivos estáticos
-app.use(express.static(path.join(__dirname, "gsd site", "public"))); // Adicionado para servir a pasta public de forma geral
-app.use("/login", express.static(path.join(__dirname, "gsd site", "public", "login")));
-app.use("/presidente", express.static(path.join(__dirname, "gsd site", "public", "presidente")));
-app.use("/coordenador", express.static(path.join(__dirname, "gsd site", "public", "coordenador")));
-app.use("/membro", express.static(path.join(__dirname, "gsd site", "public", "membro")));
+app.use(express.static(path.join(__dirname, "public")));
+app.use("/login", express.static(path.join(__dirname, "public", "login")));
+app.use("/presidente", express.static(path.join(__dirname, "public", "presidente")));
+app.use("/coordenador", express.static(path.join(__dirname, "public", "coordenador")));
+app.use("/membro", express.static(path.join(__dirname, "public", "membro")));
 
 // Redireciona para login
 app.get("/", (req, res) => {
@@ -713,9 +670,9 @@ app.delete("/api/tarefas/:id", async (req, res) => {
 });
 
 // Rotas para Arquivos
-const upload = multer({ dest: 'uploads/' }); // Pasta temporária para uploads
+const upload = multer({ dest: uploadsDir }); // Usar o caminho completo
 
-app.post('/api/upload', upload.single('arquivo'), async (req, res) => {
+app.post("/api/upload", upload.single("arquivo"), async (req, res) => {
   if (!pool) {
     return res.status(500).json({ error: "Banco de dados não configurado." });
   }
@@ -727,30 +684,30 @@ app.post('/api/upload', upload.single('arquivo'), async (req, res) => {
     // Por simplicidade, vamos apenas salvar os metadados no DB por enquanto
 
     const { rows } = await pool.query(
-      'INSERT INTO arquivos (nome_original, nome_armazenado, tipo, categoria) VALUES ($1, $2, $3, $4) RETURNING *',
+      "INSERT INTO arquivos (nome_original, nome_armazenado, tipo, categoria) VALUES ($1, $2, $3, $4) RETURNING *",
       [originalname, filename, mimetype, categoria]
     );
     res.status(201).json(rows[0]);
   } catch (error) {
-    console.error('Erro ao fazer upload do arquivo:', error);
-    res.status(500).json({ error: 'Erro ao fazer upload do arquivo.' });
+    console.error("Erro ao fazer upload do arquivo:", error);
+    res.status(500).json({ error: "Erro ao fazer upload do arquivo." });
   }
 });
 
-app.get('/api/arquivos', async (req, res) => {
+app.get("/api/arquivos", async (req, res) => {
   if (!pool) {
     return res.status(500).json({ error: "Banco de dados não configurado." });
   }
   try {
-    const { rows } = await pool.query('SELECT * FROM arquivos ORDER BY data_upload DESC');
+    const { rows } = await pool.query("SELECT * FROM arquivos ORDER BY data_upload DESC");
     res.json(rows);
   } catch (error) {
-    console.error('Erro ao buscar arquivos:', error);
-    res.status(500).json({ error: 'Erro ao buscar arquivos.' });
+    console.error("Erro ao buscar arquivos:", error);
+    res.status(500).json({ error: "Erro ao buscar arquivos." });
   }
 });
 
-app.delete('/api/arquivos/:id', async (req, res) => {
+app.delete("/api/arquivos/:id", async (req, res) => {
   if (!pool) {
     return res.status(500).json({ error: "Banco de dados não configurado." });
   }
@@ -762,11 +719,11 @@ app.delete('/api/arquivos/:id', async (req, res) => {
     //   fs.unlinkSync(path.join(__dirname, 'uploads', fileRows[0].nome_armazenado));
     // }
 
-    await pool.query('DELETE FROM arquivos WHERE id = $1', [id]);
+    await pool.query("DELETE FROM arquivos WHERE id = $1", [id]);
     res.status(204).send();
   } catch (error) {
-    console.error('Erro ao deletar arquivo:', error);
-    res.status(500).json({ error: 'Erro ao deletar arquivo.' });
+    console.error("Erro ao deletar arquivo:", error);
+    res.status(500).json({ error: "Erro ao deletar arquivo." });
   }
 });
 
@@ -936,9 +893,9 @@ app.post("/api/vendas", async (req, res) => {
 });
 
 // Rotas para Rádio GSD Mix (Áudios)
-const uploadAudio = multer({ dest: 'uploads/audios/' }); // Pasta temporária para uploads de áudio
+const uploadAudio = multer({ dest: audioUploadsDir }); // Usar o caminho completo
 
-app.post('/api/audios', uploadAudio.single('audio'), async (req, res) => {
+app.post("/api/audios", uploadAudio.single("audio"), async (req, res) => {
   if (!pool) {
     return res.status(500).json({ error: "Banco de dados não configurado." });
   }
@@ -947,40 +904,40 @@ app.post('/api/audios', uploadAudio.single('audio'), async (req, res) => {
     const { descricao } = req.body;
 
     const { rows } = await pool.query(
-      'INSERT INTO audios (nome_original, nome_armazenado, tipo, descricao) VALUES ($1, $2, $3, $4) RETURNING *',
+      "INSERT INTO audios (nome_original, nome_armazenado, tipo, descricao) VALUES ($1, $2, $3, $4) RETURNING *",
       [originalname, filename, mimetype, descricao]
     );
     res.status(201).json(rows[0]);
   } catch (error) {
-    console.error('Erro ao fazer upload do áudio:', error);
-    res.status(500).json({ error: 'Erro ao fazer upload do áudio.' });
+    console.error("Erro ao fazer upload do áudio:", error);
+    res.status(500).json({ error: "Erro ao fazer upload do áudio." });
   }
 });
 
-app.get('/api/audios', async (req, res) => {
+app.get("/api/audios", async (req, res) => {
   if (!pool) {
     return res.status(500).json({ error: "Banco de dados não configurado." });
   }
   try {
-    const { rows } = await pool.query('SELECT * FROM audios ORDER BY data_upload DESC');
+    const { rows } = await pool.query("SELECT * FROM audios ORDER BY data_upload DESC");
     res.json(rows);
   } catch (error) {
-    console.error('Erro ao buscar áudios:', error);
-    res.status(500).json({ error: 'Erro ao buscar áudios.' });
+    console.error("Erro ao buscar áudios:", error);
+    res.status(500).json({ error: "Erro ao buscar áudios." });
   }
 });
 
-app.delete('/api/audios/:id', async (req, res) => {
+app.delete("/api/audios/:id", async (req, res) => {
   if (!pool) {
     return res.status(500).json({ error: "Banco de dados não configurado." });
   }
   const { id } = req.params;
   try {
-    await pool.query('DELETE FROM audios WHERE id = $1', [id]);
+    await pool.query("DELETE FROM audios WHERE id = $1", [id]);
     res.status(204).send();
   } catch (error) {
-    console.error('Erro ao deletar áudio:', error);
-    res.status(500).json({ error: 'Erro ao deletar áudio.' });
+    console.error("Erro ao deletar áudio:", error);
+    res.status(500).json({ error: "Erro ao deletar áudio." });
   }
 });
 
